@@ -2,7 +2,7 @@
 
 **Local-first mobile app for households and hobby groups to track lent and borrowed items, due dates, returns, and portable history without accounts.**
 
-> **Status:** documentation and backlog scaffold only. The Flutter project, application builds, automated tests, and store packages have not been created yet.
+> **Status:** the pinned Flutter mobile workspace and automated quality gates are in place. The app currently launches an honest “Under development” screen; exchange workflows and persistence are tracked in the issue backlog.
 
 ## Overview
 
@@ -114,18 +114,67 @@ The app remains useful if photo and notification permissions are denied. Export 
 
 See [PLAN.md](PLAN.md) and the GitHub issue backlog for dependency order and acceptance criteria.
 
-## Development quickstart
+## Workspace architecture
 
-The repository does not contain a Flutter project yet. After the skeleton milestone lands, the expected developer flow will be:
+The Flutter source follows inward dependency boundaries:
 
-```bash
-flutter pub get
-flutter analyze
-flutter test
-flutter run
+```text
+lib/
+  app/             # application shell, theme, and dependency assembly
+  domain/          # UI-independent entities, policies, and interfaces
+  application/     # commands, queries, and workflow orchestration
+  data/            # Drift repositories, migrations, attachments, backups
+  features/        # screens and feature presentation
+  platform/        # narrow adapters around optional platform capabilities
+
+test/
+  app/ domain/ application/ data/ features/
+integration_test/
 ```
 
-Exact Flutter/Dart versions will be pinned in the project and CI rather than implied by this scaffold. Until then, these commands are planned interfaces, not verified build evidence.
+Boundary README files reserve later milestones without shipping placeholder Dart implementations. Platform plugins must remain behind narrow interfaces, and optional permissions must be requested only from the feature that needs them.
+
+## Development quickstart
+
+### Pinned toolchain
+
+- Flutter **3.47.1** (stable), recorded in [`.flutter-version`](.flutter-version)
+- Dart **3.13.1** (bundled with that Flutter release)
+- Android minimum: **Android 10 / API 29**
+- iOS minimum: **iOS 16.0**
+
+Install the exact SDK from the official Flutter repository and verify it before resolving packages:
+
+```bash
+git clone https://github.com/flutter/flutter.git \
+  --branch 3.47.1 --depth 1 "$HOME/flutter-3.47.1"
+export PATH="$HOME/flutter-3.47.1/bin:$PATH"
+flutter --version
+flutter pub get --enforce-lockfile
+```
+
+Run the same quality gates as CI:
+
+```bash
+dart format --output=none --set-exit-if-changed .
+flutter analyze
+flutter test --coverage
+```
+
+Run or build the supported platforms:
+
+```bash
+flutter run
+flutter build apk --debug
+# macOS with Xcode only; this verifies an unsigned simulator build.
+flutter build ios --simulator --no-codesign
+```
+
+CI resolves the committed lockfile from a clean checkout, checks formatting, runs strict static analysis and automated unit/widget tests, then builds an Android debug APK and unsigned iOS simulator app. An iOS simulator build is not App Store signing or physical-device evidence.
+
+### Baseline dependency policy
+
+The bootstrap has no third-party runtime packages: it uses only the BSD-3-Clause-licensed Flutter SDK. Test/lint dependencies are the Flutter SDK's `flutter_test` and BSD-3-Clause `flutter_lints` 6.0.0, with exact transitive versions committed in `pubspec.lock`. New packages require a license and privacy review before adoption.
 
 ## License
 
