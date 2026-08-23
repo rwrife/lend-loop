@@ -35,6 +35,9 @@ jobs:
       - name: Resolve locked dependencies
         run: flutter pub get --enforce-lockfile
 
+      - name: Verify dependency resolution is reproducible
+        run: git diff --exit-code
+
       - name: Check formatting
         run: dart format --output=none --set-exit-if-changed .
 
