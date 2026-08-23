@@ -1,0 +1,54 @@
+name: Temporary Flutter workspace bootstrap
+
+on:
+  push:
+    branches:
+      - feat/issue-1-flutter-bootstrap
+
+permissions:
+  contents: write
+
+jobs:
+  generate:
+    if: "github.event.head_commit.message == 'chore: request pinned Flutter workspace bootstrap'"
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Check out feature branch
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Install pinned Flutter SDK
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: 3.47.1
+          channel: stable
+          cache: true
+
+      - name: Generate Android and iOS workspace
+        shell: bash
+        run: |
+          set -euo pipefail
+          cp README.md "$RUNNER_TEMP/README.md"
+          cp .gitignore "$RUNNER_TEMP/.gitignore"
+          flutter create \
+            --org com.rwrife \
+            --project-name lend_loop \
+            --platforms android,ios \
+            --empty \
+            --no-pub \
+            .
+          cp "$RUNNER_TEMP/README.md" README.md
+          cp "$RUNNER_TEMP/.gitignore" .gitignore
+          rm .github/workflows/bootstrap-workspace.yml
+
+      - name: Commit generated workspace to feature branch
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add -A
+          git commit -m "chore: generate pinned Flutter mobile workspace"
+          git push origin HEAD
