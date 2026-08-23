@@ -18,7 +18,8 @@ class DevelopmentScreen extends StatelessWidget {
             padding: const EdgeInsets.all(24),
             child: Semantics(
               container: true,
-              label: '${status.productName}. ${status.headline}. ${status.detail}',
+              label:
+                  '${status.productName}. ${status.headline}. ${status.detail}',
               child: ExcludeSemantics(
                 child: Column(
                   mainAxisSize: MainAxisSize.min,

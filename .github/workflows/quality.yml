@@ -32,15 +32,8 @@ jobs:
           channel: stable
           cache: true
 
-      - name: Resolve dependencies for lockfile repair
-        run: flutter pub get
-
-      - name: Upload repaired lockfile
-        uses: actions/upload-artifact@v4
-        with:
-          name: repaired-pubspec-lock
-          path: pubspec.lock
-          if-no-files-found: error
+      - name: Resolve locked dependencies
+        run: flutter pub get --enforce-lockfile
 
       - name: Check formatting
         run: dart format --output=none --set-exit-if-changed .
