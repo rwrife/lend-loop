@@ -2,7 +2,7 @@
 
 **Local-first mobile app for households and hobby groups to track lent and borrowed items, due dates, returns, and portable history without accounts.**
 
-> **Status:** the pinned Flutter mobile workspace and automated quality gates are in place. The app currently launches an honest “Under development” screen; exchange workflows and persistence are tracked in the issue backlog.
+> **Status:** the offline exchange domain and Drift persistence layer are implemented and tested. The app still launches the “Under development” screen while the record/return UI is built in the next milestone.
 
 ## Overview
 
@@ -68,9 +68,15 @@ Lend Loop focuses on a private, fast handoff-and-return loop rather than catalog
 
 Flutter provides one accessible UI codebase while retaining platform-native camera/photo-picker, file-share, and notification integrations. Domain and persistence logic will remain UI-independent and testable.
 
-## Local data, export, and backup
+## Local data and persistence
 
-The planned local database uses Drift over SQLite. Core entities are `PersonAlias`, `Item`, `Exchange`, `ExchangeEvent`, `Attachment`, and `Reminder`. Photos live in app-private storage and are referenced by stable attachment IDs rather than absolute paths.
+The implemented schema uses Drift over SQLite for `PersonAlias`, `Item`, `Exchange`, append-only `ExchangeEvent`, `Attachment`, and `Reminder` records. It stores UTC instants as SQLite integer timestamps. Exchange direction is `lent` or `borrowed`; status is `open` or `returned`. A returned projection must have a return timestamp and an open projection must not. Due times cannot precede handoff times.
+
+Create and edit produce history events. Return and reopen append a compensating event and update the exchange projection in one SQLite transaction; stale or mismatched transitions are rejected, and failed writes roll back both changes. Creating another exchange can safely reuse existing person/item IDs while updating their mutable labels and preserving original creation timestamps. Repository queries support status, due cutoff, person, direction, and case-insensitive item/person text filters, with due-dated results ordered earliest first and records without due dates last. Schema version 2 rebuilds version 1 core tables with the current integrity constraints, adds attachments, reminders, and query indexes, and preserves valid history; invalid legacy rows fail migration without being silently accepted.
+
+Attachments contain a stable ID and a portable path relative to an app-owned storage root. Domain validation and a database constraint reject Unix, Windows-drive, and parent-traversal absolute paths. No device-specific path is persisted. This milestone defines attachment metadata only; it does not read photos or request camera/photo access.
+
+Export and restore remain planned for a later milestone:
 
 - No account or remote service is required.
 - A backup is a versioned ZIP containing a JSON manifest plus user-selected attachments.
@@ -172,9 +178,17 @@ flutter build ios --simulator --no-codesign
 
 CI resolves the committed lockfile from a clean checkout, checks formatting, runs strict static analysis and automated unit/widget tests, then builds an Android debug APK and unsigned iOS simulator app. An iOS simulator build is not App Store signing or physical-device evidence.
 
-### Baseline dependency policy
+### Dependencies, licenses, and generated code
 
-The bootstrap has no third-party runtime packages: it uses only the BSD-3-Clause-licensed Flutter SDK. Test/lint dependencies are the Flutter SDK's `flutter_test` and BSD-3-Clause `flutter_lints` 6.0.0, with exact transitive versions committed in `pubspec.lock`. New packages require a license and privacy review before adoption.
+Runtime persistence uses `drift` 2.34.3 (MIT) and `sqlite3` 3.5.2 (MIT, with native binaries supplied through Dart build hooks); SQLite itself is public domain. They operate on local files and do not add networking, accounts, analytics, advertising, cloud synchronization, contacts, or permissions. Flutter remains BSD-3-Clause. Development-only generation uses `drift_dev` 2.34.5 and `build_runner` 2.16.0; lint/test tooling remains `flutter_lints` 6.0.0 and `flutter_test`. Exact direct and transitive versions are committed in `pubspec.lock`.
+
+Generated Drift source is committed. Reproduce it with the pinned SDK:
+
+```bash
+dart run build_runner build
+```
+
+The concrete database accepts a Drift executor so application assembly can select an app-private file later. This milestone does not open a runtime database or alter the current development screen.
 
 ## License
 
