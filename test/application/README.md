@@ -1,3 +1,3 @@
 # Application tests
 
-Command, query, and workflow-orchestration tests with fake boundaries belong here when application behavior is introduced.
+Application tests use in-memory SQLite with deterministic clocks and IDs to verify hydration, due-state filtering, optional attachments, validation, and append-only return/reopen history.

@@ -202,8 +202,9 @@ final class DriftExchangeRepository implements domain.ExchangeRepository {
     domain.PersonAlias person,
     domain.Item item,
     domain.Exchange exchange,
-    domain.ExchangeEvent event,
-  ) => database.transaction(() async {
+    domain.ExchangeEvent event, {
+    domain.Attachment? attachment,
+  }) => database.transaction(() async {
     if (person.id != exchange.personId || item.id != exchange.itemId) {
       throw const domain.InvalidValue(
         'Person and item IDs must match the exchange projection.',
@@ -213,6 +214,13 @@ final class DriftExchangeRepository implements domain.ExchangeRepository {
         event.type != domain.ExchangeEventType.created) {
       throw const domain.InvalidValue(
         'A new exchange requires its matching created event.',
+      );
+    }
+    if (attachment != null &&
+        (attachment.exchangeId != exchange.id ||
+            attachment.itemId != item.id)) {
+      throw const domain.InvalidValue(
+        'Attachment associations must match the new exchange and item.',
       );
     }
     await database.customInsert(
@@ -248,6 +256,21 @@ final class DriftExchangeRepository implements domain.ExchangeRepository {
         .into(database.exchanges)
         .insert(_exchangeCompanion(exchange));
     await database.into(database.exchangeEvents).insert(_eventCompanion(event));
+    if (attachment != null) {
+      await database
+          .into(database.attachments)
+          .insert(
+            AttachmentsCompanion.insert(
+              id: attachment.id.value,
+              exchangeId: attachment.exchangeId.value,
+              itemId: Value<String?>(attachment.itemId?.value),
+              relativePath: attachment.relativePath,
+              mediaType: attachment.mediaType,
+              byteSize: attachment.byteSize,
+              digest: attachment.digest,
+            ),
+          );
+    }
   });
 
   @override
@@ -256,6 +279,39 @@ final class DriftExchangeRepository implements domain.ExchangeRepository {
       database.exchanges,
     )..where((Exchanges table) => table.id.equals(id.value))).getSingleOrNull();
     return row == null ? null : _exchange(row);
+  }
+
+  @override
+  Future<domain.PersonAlias?> getPerson(domain.PersonId id) async {
+    final PersonRow? row = await (database.select(
+      database.people,
+    )..where((People table) => table.id.equals(id.value))).getSingleOrNull();
+    return row == null
+        ? null
+        : domain.PersonAlias(
+            id: domain.PersonId(row.id),
+            displayName: row.displayName,
+            privateNote: row.privateNote,
+            createdAt: row.createdAt,
+            updatedAt: row.updatedAt,
+          );
+  }
+
+  @override
+  Future<domain.Item?> getItem(domain.ItemId id) async {
+    final ItemRow? row = await (database.select(
+      database.items,
+    )..where((Items table) => table.id.equals(id.value))).getSingleOrNull();
+    return row == null
+        ? null
+        : domain.Item(
+            id: domain.ItemId(row.id),
+            name: row.name,
+            description: row.description,
+            category: row.category,
+            createdAt: row.createdAt,
+            updatedAt: row.updatedAt,
+          );
   }
 
   @override
@@ -329,6 +385,26 @@ final class DriftExchangeRepository implements domain.ExchangeRepository {
         .map((QueryRow row) => database.exchangeEvents.map(row.data))
         .get();
     return rows.map(_event).toList(growable: false);
+  }
+
+  @override
+  Future<List<domain.Attachment>> attachments(domain.ExchangeId id) async {
+    final List<AttachmentRow> rows = await (database.select(
+      database.attachments,
+    )..where((Attachments table) => table.exchangeId.equals(id.value))).get();
+    return rows
+        .map(
+          (AttachmentRow row) => domain.Attachment(
+            id: domain.AttachmentId(row.id),
+            exchangeId: domain.ExchangeId(row.exchangeId),
+            itemId: row.itemId == null ? null : domain.ItemId(row.itemId!),
+            relativePath: row.relativePath,
+            mediaType: row.mediaType,
+            byteSize: row.byteSize,
+            digest: row.digest,
+          ),
+        )
+        .toList(growable: false);
   }
 
   @override
