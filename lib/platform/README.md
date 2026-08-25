@@ -1,3 +1,3 @@
 # Platform boundary
 
-Narrow adapters for notifications, photo selection, and explicit file/share pickers belong here. Features depend on interfaces rather than plugin channels so permission denial leaves the core offline flow usable. Adapters are added only with the feature that uses them; no placeholder implementation is shipped in the bootstrap.
+`PhotoAdapter` isolates optional photo access from the workflow and presentation tests. `ImagePickerPhotoAdapter` invokes the system photo picker only after the user taps the photo action, copies selected bytes to app-private storage, computes a SHA-256 digest, returns only portable metadata, and maps denied/cancelled access to non-fatal results. Notification and explicit file/share adapters remain future milestones.

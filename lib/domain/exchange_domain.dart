@@ -374,11 +374,15 @@ abstract interface class ExchangeRepository {
     PersonAlias person,
     Item item,
     Exchange exchange,
-    ExchangeEvent event,
-  );
+    ExchangeEvent event, {
+    Attachment? attachment,
+  });
   Future<Exchange?> get(ExchangeId id);
+  Future<PersonAlias?> getPerson(PersonId id);
+  Future<Item?> getItem(ItemId id);
   Future<List<Exchange>> find(ExchangeQuery query);
   Future<List<ExchangeEvent>> events(ExchangeId id);
+  Future<List<Attachment>> attachments(ExchangeId id);
   Future<void> saveTransition(
     Exchange previous,
     Exchange next,

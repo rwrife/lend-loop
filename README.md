@@ -2,7 +2,7 @@
 
 **Local-first mobile app for households and hobby groups to track lent and borrowed items, due dates, returns, and portable history without accounts.**
 
-> **Status:** the offline exchange domain and Drift persistence layer are implemented and tested. The app still launches the “Under development” screen while the record/return UI is built in the next milestone.
+> **Status:** the primary offline handoff workflow is implemented: the app opens to local open exchanges, records lent or borrowed items, supports an optional private photo, and preserves return/reopen history.
 
 ## Overview
 
@@ -23,7 +23,7 @@ Lend Loop focuses on a private, fast handoff-and-return loop rather than catalog
 
 ## Concrete use cases
 
-1. Photograph a drill, enter “Sam,” choose **Lent**, and set a return reminder for next Saturday.
+1. Select a drill photo, enter “Sam,” choose **Lent**, and set a due date for next Saturday.
 2. Record a library book borrowed from a friend without granting contacts access.
 3. Filter open exchanges by person before a club meeting.
 4. Mark one or several items returned while preserving a dated history.
@@ -38,6 +38,14 @@ Lend Loop focuses on a private, fast handoff-and-return loop rather than catalog
 5. Receive an optional on-device reminder. Lend Loop never sends a message to another person on the user's behalf.
 6. Open the exchange, postpone its reminder if needed, or mark it returned.
 7. Search/filter history or export a portable backup.
+
+## Implemented record and return workflow
+
+The app now opens directly to **Exchanges** with **All open**, **Due soon**, **Overdue**, and **Returned** filters, so a previously returned record remains reachable for an explicit later reopen. A handoff records its lent/borrowed direction, item name, local person alias, handoff date, optional due date, and optional notes. Required fields and inconsistent dates are reported inline. List and detail wording always says “You lent … to …” or “You borrowed … from …”; direction and due state are never communicated by color or an icon alone.
+
+**Add optional photo** is an explicit, just-in-time photo-library action behind a platform adapter. A selected image is copied into the app-private attachment directory, SHA-256 hashed, and referenced by a portable relative path. Cancellation or denied photo access leaves the form and the saved text-only record fully usable. If a referenced image is later missing, details show a missing-photo message without hiding the record. Lend Loop does not request contacts, location, notification, or network access for this workflow.
+
+Marking an exchange returned atomically appends a `returned` event and updates the projection. A six-second snackbar offers **Undo**, which appends a compensating `reopened` event; returned details also expose an explicit **Reopen exchange** action. History is preserved rather than rewritten. Empty, loading, validation, missing-photo, database-open, list-load, and save-error states provide explicit text.
 
 ## MVP features
 
@@ -91,7 +99,7 @@ Lend Loop is offline-first and does not include analytics, advertising, or remot
 | Permission/capability | Default | Why |
 |---|---:|---|
 | Contacts | Not requested | People are entered as local aliases |
-| Camera/photos | Optional, just in time | Add an item photo |
+| Photo library | Optional, just in time | Add an item photo after tapping the photo action |
 | Notifications | Optional, just in time | Schedule on-device due reminders |
 | Location | Not requested | No location workflow |
 | Network | Not required for core value | Development/package retrieval only |
@@ -180,7 +188,7 @@ CI resolves the committed lockfile from a clean checkout, checks formatting, run
 
 ### Dependencies, licenses, and generated code
 
-Runtime persistence uses `drift` 2.34.3 (MIT) and `sqlite3` 3.5.2 (MIT, with native binaries supplied through Dart build hooks); SQLite itself is public domain. They operate on local files and do not add networking, accounts, analytics, advertising, cloud synchronization, contacts, or permissions. Flutter remains BSD-3-Clause. Development-only generation uses `drift_dev` 2.34.5 and `build_runner` 2.16.0; lint/test tooling remains `flutter_lints` 6.0.0 and `flutter_test`. Exact direct and transitive versions are committed in `pubspec.lock`.
+Runtime persistence uses `drift` 2.34.3 (MIT) and `sqlite3` 3.5.2 (MIT, with native binaries supplied through Dart build hooks); SQLite itself is public domain. `path_provider` 2.1.6 locates app-private storage, `image_picker` 1.2.3 performs only the user-triggered photo selection, and `crypto` 3.0.7 computes attachment SHA-256 digests. These dependencies do not add accounts, analytics, advertising, cloud synchronization, contacts, or hidden data transfer. Flutter remains BSD-3-Clause. Development-only generation uses `drift_dev` 2.34.5 and `build_runner` 2.16.0; lint/test tooling remains `flutter_lints` 6.0.0 and `flutter_test`. Exact direct and transitive versions are committed in `pubspec.lock`.
 
 Generated Drift source is committed. Reproduce it with the pinned SDK:
 
@@ -188,7 +196,7 @@ Generated Drift source is committed. Reproduce it with the pinned SDK:
 dart run build_runner build
 ```
 
-The concrete database accepts a Drift executor so application assembly can select an app-private file later. This milestone does not open a runtime database or alter the current development screen.
+Application startup opens `lend_loop.sqlite` in the platform application-support directory. Startup failures display an honest local-storage error instead of silently substituting an empty database. The exchange workflow receives the concrete repository, clock, ID generator, and photo adapter through dependency injection, while tests use in-memory SQLite and adapter fakes.
 
 ## License
 

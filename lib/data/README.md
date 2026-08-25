@@ -1,3 +1,3 @@
 # Data boundary
 
-Drift schema, migrations, repository implementations, app-private attachments, and portable backup codecs belong here. Code in this boundary implements interfaces defined inward in domain/application. Persistence begins with issue #2; no placeholder implementation is shipped in the bootstrap.
+The Drift schema, migrations, and repository implementation persist people, items, exchanges, append-only events, attachments, and reminder metadata. `database_factory.dart` opens SQLite in the platform application-support directory. Record creation plus optional attachment metadata is transactional; return/reopen event and projection changes are transactional. Portable backup codecs remain a future milestone.
