@@ -2,7 +2,7 @@
 
 **Local-first mobile app for households and hobby groups to track lent and borrowed items, due dates, returns, and portable history without accounts.**
 
-> **Status:** the primary offline handoff workflow is implemented: the app opens to local open exchanges, records lent or borrowed items, supports an optional private photo, and preserves return/reopen history.
+> **Status:** the offline handoff workflow includes accessible history search and optional, just-in-time on-device due reminders with persisted reconciliation and safe notification navigation.
 
 ## Overview
 
@@ -188,7 +188,9 @@ CI resolves the committed lockfile from a clean checkout, checks formatting, run
 
 ### Dependencies, licenses, and generated code
 
-Runtime persistence uses `drift` 2.34.3 (MIT) and `sqlite3` 3.5.2 (MIT, with native binaries supplied through Dart build hooks); SQLite itself is public domain. `path_provider` 2.1.6 locates app-private storage, `image_picker` 1.2.3 performs only the user-triggered photo selection, and `crypto` 3.0.7 computes attachment SHA-256 digests. These dependencies do not add accounts, analytics, advertising, cloud synchronization, contacts, or hidden data transfer. Flutter remains BSD-3-Clause. Development-only generation uses `drift_dev` 2.34.5 and `build_runner` 2.16.0; lint/test tooling remains `flutter_lints` 6.0.0 and `flutter_test`. Exact direct and transitive versions are committed in `pubspec.lock`.
+Runtime persistence uses `drift` 2.34.3 (MIT) and `sqlite3` 3.5.2 (MIT, with native binaries supplied through Dart build hooks); SQLite itself is public domain. `path_provider` 2.1.6 locates app-private storage, `image_picker` 1.2.3 performs only the user-triggered photo selection, `flutter_local_notifications` 19.4.2 schedules optional on-device reminders, `timezone` 0.10.1 represents their UTC instants, and `crypto` 3.0.7 computes attachment SHA-256 digests. These dependencies do not add accounts, analytics, advertising, cloud synchronization, contacts, or hidden data transfer. Flutter remains BSD-3-Clause. Development-only generation uses `drift_dev` 2.34.5 and `build_runner` 2.16.0; lint/test tooling remains `flutter_lints` 6.0.0 and `flutter_test`. Exact direct and transitive versions are committed in `pubspec.lock`.
+
+Notification platform declarations, automated coverage, and an honest manual verification checklist are documented in [docs/notification-verification.md](docs/notification-verification.md). No simulator or physical-device verification is implied by automated tests.
 
 Generated Drift source is committed. Reproduce it with the pinned SDK:
 

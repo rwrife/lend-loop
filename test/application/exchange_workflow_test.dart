@@ -147,6 +147,66 @@ void main() {
     );
   });
 
+  test('editing an open due date persists an edited event', () async {
+    final ExchangeRecord open = await workflow.recordHandoff(
+      HandoffDraft(
+        direction: ExchangeDirection.lent,
+        itemName: 'Drill',
+        personName: 'Sam',
+        handedOffAt: DateTime.utc(2026, 8, 20),
+        dueAt: DateTime.utc(2026, 8, 27),
+      ),
+    );
+
+    final ExchangeRecord edited = await workflow.editDueDate(
+      open.exchange.id,
+      DateTime.utc(2026, 8, 30),
+    );
+
+    expect(edited.exchange.dueAt, DateTime.utc(2026, 8, 30));
+    expect(edited.events.last.type, ExchangeEventType.edited);
+  });
+
+  test(
+    'due-date edit atomically aligns an existing desired reminder',
+    () async {
+      final ExchangeRecord open = await workflow.recordHandoff(
+        HandoffDraft(
+          direction: ExchangeDirection.lent,
+          itemName: 'Drill',
+          personName: 'Sam',
+          handedOffAt: DateTime.utc(2026, 8, 20),
+          dueAt: DateTime.utc(2026, 8, 27),
+        ),
+      );
+      final DriftExchangeRepository repository = DriftExchangeRepository(
+        database,
+      );
+      await repository.saveReminder(
+        Reminder(
+          exchangeId: open.exchange.id,
+          requestedAt: clock.now(),
+          scheduledAt: DateTime.utc(2026, 8, 27),
+          platformSchedulingId: 72,
+          title: 'Reminder',
+          body: 'Drill with Sam is due',
+        ),
+      );
+
+      await workflow.editDueDate(open.exchange.id, DateTime.utc(2026, 8, 30));
+
+      expect(
+        (await repository.getReminder(open.exchange.id))!.scheduledAt
+            .isAtSameMomentAs(DateTime.utc(2026, 8, 30)),
+        isTrue,
+      );
+      expect(
+        (await repository.getReminder(open.exchange.id))!.deliveryState,
+        ReminderDeliveryState.pending,
+      );
+    },
+  );
+
   test(
     'returned records remain reachable for an explicit later reopen',
     () async {
@@ -183,5 +243,84 @@ void main() {
       throwsA(isA<InvalidValue>()),
     );
     expect(await workflow.openExchanges(), isEmpty);
+  });
+
+  test(
+    'search combines text, person, direction, status, and date filters',
+    () async {
+      final ExchangeRecord drill = await workflow.recordHandoff(
+        HandoffDraft(
+          direction: ExchangeDirection.lent,
+          itemName: 'Cordless drill',
+          personName: 'Sam Rivera',
+          handedOffAt: DateTime.utc(2026, 8, 20),
+        ),
+      );
+      await workflow.recordHandoff(
+        HandoffDraft(
+          direction: ExchangeDirection.borrowed,
+          itemName: 'Drill bits',
+          personName: 'Alex',
+          handedOffAt: DateTime.utc(2026, 8, 21),
+        ),
+      );
+      await workflow.markReturned(drill.exchange.id);
+
+      final List<ExchangeRecord> result = await workflow.search(
+        ExchangeSearchFilter(
+          text: 'drill',
+          personId: drill.person.id,
+          direction: ExchangeDirection.lent,
+          status: ExchangeStatus.returned,
+          from: DateTime.utc(2026, 8, 19),
+          through: DateTime.utc(2026, 8, 20, 23, 59),
+        ),
+      );
+
+      expect(
+        result.map((ExchangeRecord value) => value.exchange.id),
+        <ExchangeId>[drill.exchange.id],
+      );
+    },
+  );
+
+  test('search combines person text with handoff date bounds', () async {
+    final ExchangeRecord matching = await workflow.recordHandoff(
+      HandoffDraft(
+        direction: ExchangeDirection.lent,
+        itemName: 'Drill',
+        personName: 'Sam Rivera',
+        handedOffAt: DateTime.utc(2026, 8, 20),
+      ),
+    );
+    await workflow.recordHandoff(
+      HandoffDraft(
+        direction: ExchangeDirection.lent,
+        itemName: 'Saw',
+        personName: 'Sam Rivera',
+        handedOffAt: DateTime.utc(2026, 8, 10),
+      ),
+    );
+    await workflow.recordHandoff(
+      HandoffDraft(
+        direction: ExchangeDirection.lent,
+        itemName: 'Book',
+        personName: 'Alex',
+        handedOffAt: DateTime.utc(2026, 8, 20),
+      ),
+    );
+
+    final List<ExchangeRecord> result = await workflow.search(
+      ExchangeSearchFilter(
+        personName: 'sam',
+        from: DateTime.utc(2026, 8, 19),
+        through: DateTime.utc(2026, 8, 21),
+      ),
+    );
+
+    expect(
+      result.map((ExchangeRecord value) => value.exchange.id),
+      <ExchangeId>[matching.exchange.id],
+    );
   });
 }

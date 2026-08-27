@@ -2311,6 +2311,17 @@ class $RemindersTable extends Reminders
     type: DriftSqlType.dateTime,
     requiredDuringInsert: true,
   );
+  static const VerificationMeta _scheduledAtMeta = const VerificationMeta(
+    'scheduledAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> scheduledAt = GeneratedColumn<DateTime>(
+    'scheduled_at',
+    aliasedName,
+    false,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: true,
+  );
   static const VerificationMeta _platformSchedulingIdMeta =
       const VerificationMeta('platformSchedulingId');
   @override
@@ -2322,22 +2333,48 @@ class $RemindersTable extends Reminders
     requiredDuringInsert: true,
     defaultConstraints: GeneratedColumn.constraintIsAlways('UNIQUE'),
   );
-  static const VerificationMeta _stateMeta = const VerificationMeta('state');
+  static const VerificationMeta _titleMeta = const VerificationMeta('title');
   @override
-  late final GeneratedColumn<String> state = GeneratedColumn<String>(
-    'state',
+  late final GeneratedColumn<String> title = GeneratedColumn<String>(
+    'title',
     aliasedName,
     false,
     additionalChecks: GeneratedColumn.checkTextLength(minTextLength: 1),
     type: DriftSqlType.string,
     requiredDuringInsert: true,
   );
+  static const VerificationMeta _bodyMeta = const VerificationMeta('body');
+  @override
+  late final GeneratedColumn<String> body = GeneratedColumn<String>(
+    'body',
+    aliasedName,
+    false,
+    additionalChecks: GeneratedColumn.checkTextLength(minTextLength: 1),
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _deliveryStateMeta = const VerificationMeta(
+    'deliveryState',
+  );
+  @override
+  late final GeneratedColumn<String> deliveryState = GeneratedColumn<String>(
+    'delivery_state',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+    $customConstraints:
+        'NOT NULL CHECK (delivery_state IN (\'pending\', \'scheduled\'))',
+  );
   @override
   List<GeneratedColumn> get $columns => [
     exchangeId,
     requestedAt,
+    scheduledAt,
     platformSchedulingId,
-    state,
+    title,
+    body,
+    deliveryState,
   ];
   @override
   String get aliasedName => _alias ?? actualTableName;
@@ -2370,6 +2407,17 @@ class $RemindersTable extends Reminders
     } else if (isInserting) {
       context.missing(_requestedAtMeta);
     }
+    if (data.containsKey('scheduled_at')) {
+      context.handle(
+        _scheduledAtMeta,
+        scheduledAt.isAcceptableOrUnknown(
+          data['scheduled_at']!,
+          _scheduledAtMeta,
+        ),
+      );
+    } else if (isInserting) {
+      context.missing(_scheduledAtMeta);
+    }
     if (data.containsKey('platform_scheduling_id')) {
       context.handle(
         _platformSchedulingIdMeta,
@@ -2381,13 +2429,32 @@ class $RemindersTable extends Reminders
     } else if (isInserting) {
       context.missing(_platformSchedulingIdMeta);
     }
-    if (data.containsKey('state')) {
+    if (data.containsKey('title')) {
       context.handle(
-        _stateMeta,
-        state.isAcceptableOrUnknown(data['state']!, _stateMeta),
+        _titleMeta,
+        title.isAcceptableOrUnknown(data['title']!, _titleMeta),
       );
     } else if (isInserting) {
-      context.missing(_stateMeta);
+      context.missing(_titleMeta);
+    }
+    if (data.containsKey('body')) {
+      context.handle(
+        _bodyMeta,
+        body.isAcceptableOrUnknown(data['body']!, _bodyMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_bodyMeta);
+    }
+    if (data.containsKey('delivery_state')) {
+      context.handle(
+        _deliveryStateMeta,
+        deliveryState.isAcceptableOrUnknown(
+          data['delivery_state']!,
+          _deliveryStateMeta,
+        ),
+      );
+    } else if (isInserting) {
+      context.missing(_deliveryStateMeta);
     }
     return context;
   }
@@ -2406,13 +2473,25 @@ class $RemindersTable extends Reminders
         DriftSqlType.dateTime,
         data['${effectivePrefix}requested_at'],
       )!,
+      scheduledAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}scheduled_at'],
+      )!,
       platformSchedulingId: attachedDatabase.typeMapping.read(
         DriftSqlType.int,
         data['${effectivePrefix}platform_scheduling_id'],
       )!,
-      state: attachedDatabase.typeMapping.read(
+      title: attachedDatabase.typeMapping.read(
         DriftSqlType.string,
-        data['${effectivePrefix}state'],
+        data['${effectivePrefix}title'],
+      )!,
+      body: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}body'],
+      )!,
+      deliveryState: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}delivery_state'],
       )!,
     );
   }
@@ -2426,21 +2505,30 @@ class $RemindersTable extends Reminders
 class ReminderRow extends DataClass implements Insertable<ReminderRow> {
   final String exchangeId;
   final DateTime requestedAt;
+  final DateTime scheduledAt;
   final int platformSchedulingId;
-  final String state;
+  final String title;
+  final String body;
+  final String deliveryState;
   const ReminderRow({
     required this.exchangeId,
     required this.requestedAt,
+    required this.scheduledAt,
     required this.platformSchedulingId,
-    required this.state,
+    required this.title,
+    required this.body,
+    required this.deliveryState,
   });
   @override
   Map<String, Expression> toColumns(bool nullToAbsent) {
     final map = <String, Expression>{};
     map['exchange_id'] = Variable<String>(exchangeId);
     map['requested_at'] = Variable<DateTime>(requestedAt);
+    map['scheduled_at'] = Variable<DateTime>(scheduledAt);
     map['platform_scheduling_id'] = Variable<int>(platformSchedulingId);
-    map['state'] = Variable<String>(state);
+    map['title'] = Variable<String>(title);
+    map['body'] = Variable<String>(body);
+    map['delivery_state'] = Variable<String>(deliveryState);
     return map;
   }
 
@@ -2448,8 +2536,11 @@ class ReminderRow extends DataClass implements Insertable<ReminderRow> {
     return RemindersCompanion(
       exchangeId: Value(exchangeId),
       requestedAt: Value(requestedAt),
+      scheduledAt: Value(scheduledAt),
       platformSchedulingId: Value(platformSchedulingId),
-      state: Value(state),
+      title: Value(title),
+      body: Value(body),
+      deliveryState: Value(deliveryState),
     );
   }
 
@@ -2461,10 +2552,13 @@ class ReminderRow extends DataClass implements Insertable<ReminderRow> {
     return ReminderRow(
       exchangeId: serializer.fromJson<String>(json['exchangeId']),
       requestedAt: serializer.fromJson<DateTime>(json['requestedAt']),
+      scheduledAt: serializer.fromJson<DateTime>(json['scheduledAt']),
       platformSchedulingId: serializer.fromJson<int>(
         json['platformSchedulingId'],
       ),
-      state: serializer.fromJson<String>(json['state']),
+      title: serializer.fromJson<String>(json['title']),
+      body: serializer.fromJson<String>(json['body']),
+      deliveryState: serializer.fromJson<String>(json['deliveryState']),
     );
   }
   @override
@@ -2473,21 +2567,30 @@ class ReminderRow extends DataClass implements Insertable<ReminderRow> {
     return <String, dynamic>{
       'exchangeId': serializer.toJson<String>(exchangeId),
       'requestedAt': serializer.toJson<DateTime>(requestedAt),
+      'scheduledAt': serializer.toJson<DateTime>(scheduledAt),
       'platformSchedulingId': serializer.toJson<int>(platformSchedulingId),
-      'state': serializer.toJson<String>(state),
+      'title': serializer.toJson<String>(title),
+      'body': serializer.toJson<String>(body),
+      'deliveryState': serializer.toJson<String>(deliveryState),
     };
   }
 
   ReminderRow copyWith({
     String? exchangeId,
     DateTime? requestedAt,
+    DateTime? scheduledAt,
     int? platformSchedulingId,
-    String? state,
+    String? title,
+    String? body,
+    String? deliveryState,
   }) => ReminderRow(
     exchangeId: exchangeId ?? this.exchangeId,
     requestedAt: requestedAt ?? this.requestedAt,
+    scheduledAt: scheduledAt ?? this.scheduledAt,
     platformSchedulingId: platformSchedulingId ?? this.platformSchedulingId,
-    state: state ?? this.state,
+    title: title ?? this.title,
+    body: body ?? this.body,
+    deliveryState: deliveryState ?? this.deliveryState,
   );
   ReminderRow copyWithCompanion(RemindersCompanion data) {
     return ReminderRow(
@@ -2497,10 +2600,17 @@ class ReminderRow extends DataClass implements Insertable<ReminderRow> {
       requestedAt: data.requestedAt.present
           ? data.requestedAt.value
           : this.requestedAt,
+      scheduledAt: data.scheduledAt.present
+          ? data.scheduledAt.value
+          : this.scheduledAt,
       platformSchedulingId: data.platformSchedulingId.present
           ? data.platformSchedulingId.value
           : this.platformSchedulingId,
-      state: data.state.present ? data.state.value : this.state,
+      title: data.title.present ? data.title.value : this.title,
+      body: data.body.present ? data.body.value : this.body,
+      deliveryState: data.deliveryState.present
+          ? data.deliveryState.value
+          : this.deliveryState,
     );
   }
 
@@ -2509,61 +2619,92 @@ class ReminderRow extends DataClass implements Insertable<ReminderRow> {
     return (StringBuffer('ReminderRow(')
           ..write('exchangeId: $exchangeId, ')
           ..write('requestedAt: $requestedAt, ')
+          ..write('scheduledAt: $scheduledAt, ')
           ..write('platformSchedulingId: $platformSchedulingId, ')
-          ..write('state: $state')
+          ..write('title: $title, ')
+          ..write('body: $body, ')
+          ..write('deliveryState: $deliveryState')
           ..write(')'))
         .toString();
   }
 
   @override
-  int get hashCode =>
-      Object.hash(exchangeId, requestedAt, platformSchedulingId, state);
+  int get hashCode => Object.hash(
+    exchangeId,
+    requestedAt,
+    scheduledAt,
+    platformSchedulingId,
+    title,
+    body,
+    deliveryState,
+  );
   @override
   bool operator ==(Object other) =>
       identical(this, other) ||
       (other is ReminderRow &&
           other.exchangeId == this.exchangeId &&
           other.requestedAt == this.requestedAt &&
+          other.scheduledAt == this.scheduledAt &&
           other.platformSchedulingId == this.platformSchedulingId &&
-          other.state == this.state);
+          other.title == this.title &&
+          other.body == this.body &&
+          other.deliveryState == this.deliveryState);
 }
 
 class RemindersCompanion extends UpdateCompanion<ReminderRow> {
   final Value<String> exchangeId;
   final Value<DateTime> requestedAt;
+  final Value<DateTime> scheduledAt;
   final Value<int> platformSchedulingId;
-  final Value<String> state;
+  final Value<String> title;
+  final Value<String> body;
+  final Value<String> deliveryState;
   final Value<int> rowid;
   const RemindersCompanion({
     this.exchangeId = const Value.absent(),
     this.requestedAt = const Value.absent(),
+    this.scheduledAt = const Value.absent(),
     this.platformSchedulingId = const Value.absent(),
-    this.state = const Value.absent(),
+    this.title = const Value.absent(),
+    this.body = const Value.absent(),
+    this.deliveryState = const Value.absent(),
     this.rowid = const Value.absent(),
   });
   RemindersCompanion.insert({
     required String exchangeId,
     required DateTime requestedAt,
+    required DateTime scheduledAt,
     required int platformSchedulingId,
-    required String state,
+    required String title,
+    required String body,
+    required String deliveryState,
     this.rowid = const Value.absent(),
   }) : exchangeId = Value(exchangeId),
        requestedAt = Value(requestedAt),
+       scheduledAt = Value(scheduledAt),
        platformSchedulingId = Value(platformSchedulingId),
-       state = Value(state);
+       title = Value(title),
+       body = Value(body),
+       deliveryState = Value(deliveryState);
   static Insertable<ReminderRow> custom({
     Expression<String>? exchangeId,
     Expression<DateTime>? requestedAt,
+    Expression<DateTime>? scheduledAt,
     Expression<int>? platformSchedulingId,
-    Expression<String>? state,
+    Expression<String>? title,
+    Expression<String>? body,
+    Expression<String>? deliveryState,
     Expression<int>? rowid,
   }) {
     return RawValuesInsertable({
       if (exchangeId != null) 'exchange_id': exchangeId,
       if (requestedAt != null) 'requested_at': requestedAt,
+      if (scheduledAt != null) 'scheduled_at': scheduledAt,
       if (platformSchedulingId != null)
         'platform_scheduling_id': platformSchedulingId,
-      if (state != null) 'state': state,
+      if (title != null) 'title': title,
+      if (body != null) 'body': body,
+      if (deliveryState != null) 'delivery_state': deliveryState,
       if (rowid != null) 'rowid': rowid,
     });
   }
@@ -2571,15 +2712,21 @@ class RemindersCompanion extends UpdateCompanion<ReminderRow> {
   RemindersCompanion copyWith({
     Value<String>? exchangeId,
     Value<DateTime>? requestedAt,
+    Value<DateTime>? scheduledAt,
     Value<int>? platformSchedulingId,
-    Value<String>? state,
+    Value<String>? title,
+    Value<String>? body,
+    Value<String>? deliveryState,
     Value<int>? rowid,
   }) {
     return RemindersCompanion(
       exchangeId: exchangeId ?? this.exchangeId,
       requestedAt: requestedAt ?? this.requestedAt,
+      scheduledAt: scheduledAt ?? this.scheduledAt,
       platformSchedulingId: platformSchedulingId ?? this.platformSchedulingId,
-      state: state ?? this.state,
+      title: title ?? this.title,
+      body: body ?? this.body,
+      deliveryState: deliveryState ?? this.deliveryState,
       rowid: rowid ?? this.rowid,
     );
   }
@@ -2593,11 +2740,20 @@ class RemindersCompanion extends UpdateCompanion<ReminderRow> {
     if (requestedAt.present) {
       map['requested_at'] = Variable<DateTime>(requestedAt.value);
     }
+    if (scheduledAt.present) {
+      map['scheduled_at'] = Variable<DateTime>(scheduledAt.value);
+    }
     if (platformSchedulingId.present) {
       map['platform_scheduling_id'] = Variable<int>(platformSchedulingId.value);
     }
-    if (state.present) {
-      map['state'] = Variable<String>(state.value);
+    if (title.present) {
+      map['title'] = Variable<String>(title.value);
+    }
+    if (body.present) {
+      map['body'] = Variable<String>(body.value);
+    }
+    if (deliveryState.present) {
+      map['delivery_state'] = Variable<String>(deliveryState.value);
     }
     if (rowid.present) {
       map['rowid'] = Variable<int>(rowid.value);
@@ -2610,8 +2766,11 @@ class RemindersCompanion extends UpdateCompanion<ReminderRow> {
     return (StringBuffer('RemindersCompanion(')
           ..write('exchangeId: $exchangeId, ')
           ..write('requestedAt: $requestedAt, ')
+          ..write('scheduledAt: $scheduledAt, ')
           ..write('platformSchedulingId: $platformSchedulingId, ')
-          ..write('state: $state, ')
+          ..write('title: $title, ')
+          ..write('body: $body, ')
+          ..write('deliveryState: $deliveryState, ')
           ..write('rowid: $rowid')
           ..write(')'))
         .toString();
@@ -4910,15 +5069,21 @@ typedef $$AttachmentsTableProcessedTableManager =
 typedef $$RemindersTableCreateCompanionBuilder = RemindersCompanion Function({
   required String exchangeId,
   required DateTime requestedAt,
+  required DateTime scheduledAt,
   required int platformSchedulingId,
-  required String state,
+  required String title,
+  required String body,
+  required String deliveryState,
   Value<int> rowid,
 });
 typedef $$RemindersTableUpdateCompanionBuilder = RemindersCompanion Function({
   Value<String> exchangeId,
   Value<DateTime> requestedAt,
+  Value<DateTime> scheduledAt,
   Value<int> platformSchedulingId,
-  Value<String> state,
+  Value<String> title,
+  Value<String> body,
+  Value<String> deliveryState,
   Value<int> rowid,
 });
 
@@ -4958,13 +5123,28 @@ class $$RemindersTableFilterComposer
     builder: (column) => ColumnFilters(column),
   );
 
+  ColumnFilters<DateTime> get scheduledAt => $composableBuilder(
+    column: $table.scheduledAt,
+    builder: (column) => ColumnFilters(column),
+  );
+
   ColumnFilters<int> get platformSchedulingId => $composableBuilder(
     column: $table.platformSchedulingId,
     builder: (column) => ColumnFilters(column),
   );
 
-  ColumnFilters<String> get state => $composableBuilder(
-    column: $table.state,
+  ColumnFilters<String> get title => $composableBuilder(
+    column: $table.title,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get body => $composableBuilder(
+    column: $table.body,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get deliveryState => $composableBuilder(
+    column: $table.deliveryState,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -5006,13 +5186,28 @@ class $$RemindersTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
+  ColumnOrderings<DateTime> get scheduledAt => $composableBuilder(
+    column: $table.scheduledAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+
   ColumnOrderings<int> get platformSchedulingId => $composableBuilder(
     column: $table.platformSchedulingId,
     builder: (column) => ColumnOrderings(column),
   );
 
-  ColumnOrderings<String> get state => $composableBuilder(
-    column: $table.state,
+  ColumnOrderings<String> get title => $composableBuilder(
+    column: $table.title,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get body => $composableBuilder(
+    column: $table.body,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get deliveryState => $composableBuilder(
+    column: $table.deliveryState,
     builder: (column) => ColumnOrderings(column),
   );
 
@@ -5054,13 +5249,26 @@ class $$RemindersTableAnnotationComposer
     builder: (column) => column,
   );
 
+  GeneratedColumn<DateTime> get scheduledAt => $composableBuilder(
+    column: $table.scheduledAt,
+    builder: (column) => column,
+  );
+
   GeneratedColumn<int> get platformSchedulingId => $composableBuilder(
     column: $table.platformSchedulingId,
     builder: (column) => column,
   );
 
-  GeneratedColumn<String> get state =>
-      $composableBuilder(column: $table.state, builder: (column) => column);
+  GeneratedColumn<String> get title =>
+      $composableBuilder(column: $table.title, builder: (column) => column);
+
+  GeneratedColumn<String> get body =>
+      $composableBuilder(column: $table.body, builder: (column) => column);
+
+  GeneratedColumn<String> get deliveryState => $composableBuilder(
+    column: $table.deliveryState,
+    builder: (column) => column,
+  );
 
   $$ExchangesTableAnnotationComposer get exchangeId {
     final $$ExchangesTableAnnotationComposer composer = $composerBuilder(
@@ -5116,28 +5324,40 @@ class $$RemindersTableTableManager
               ({
                 Value<String> exchangeId = const Value.absent(),
                 Value<DateTime> requestedAt = const Value.absent(),
+                Value<DateTime> scheduledAt = const Value.absent(),
                 Value<int> platformSchedulingId = const Value.absent(),
-                Value<String> state = const Value.absent(),
+                Value<String> title = const Value.absent(),
+                Value<String> body = const Value.absent(),
+                Value<String> deliveryState = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
               }) => RemindersCompanion(
                 exchangeId: exchangeId,
                 requestedAt: requestedAt,
+                scheduledAt: scheduledAt,
                 platformSchedulingId: platformSchedulingId,
-                state: state,
+                title: title,
+                body: body,
+                deliveryState: deliveryState,
                 rowid: rowid,
               ),
           createCompanionCallback:
               ({
                 required String exchangeId,
                 required DateTime requestedAt,
+                required DateTime scheduledAt,
                 required int platformSchedulingId,
-                required String state,
+                required String title,
+                required String body,
+                required String deliveryState,
                 Value<int> rowid = const Value.absent(),
               }) => RemindersCompanion.insert(
                 exchangeId: exchangeId,
                 requestedAt: requestedAt,
+                scheduledAt: scheduledAt,
                 platformSchedulingId: platformSchedulingId,
-                state: state,
+                title: title,
+                body: body,
+                deliveryState: deliveryState,
                 rowid: rowid,
               ),
           withReferenceMapper: (p0) => p0

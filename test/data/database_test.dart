@@ -137,6 +137,90 @@ void main() {
     },
   );
 
+  test('persists, lists, replaces, and deletes reminder state', () async {
+    final Exchange exchange = await add(
+      suffix: '9',
+      personName: 'Sam',
+      itemName: 'Drill',
+      direction: ExchangeDirection.lent,
+    );
+    final Reminder first = Reminder(
+      exchangeId: exchange.id,
+      requestedAt: base,
+      scheduledAt: base.add(const Duration(days: 1)),
+      platformSchedulingId: 42,
+      title: 'Reminder',
+      body: 'Drill is due',
+    );
+
+    await repository.saveReminder(first);
+    expect((await repository.getReminder(exchange.id))!.body, 'Drill is due');
+    expect(
+      (await repository.getReminder(exchange.id))!.deliveryState,
+      ReminderDeliveryState.scheduled,
+    );
+    expect(await repository.reminders(), hasLength(1));
+
+    await repository.saveReminder(
+      Reminder(
+        exchangeId: exchange.id,
+        requestedAt: base.add(const Duration(hours: 1)),
+        scheduledAt: base.add(const Duration(days: 2)),
+        platformSchedulingId: 42,
+        title: 'Reminder',
+        body: 'Drill is due later',
+        deliveryState: ReminderDeliveryState.pending,
+      ),
+    );
+    expect(
+      (await repository.getReminder(exchange.id))!.body,
+      'Drill is due later',
+    );
+    expect(
+      (await repository.getReminder(exchange.id))!.deliveryState,
+      ReminderDeliveryState.pending,
+    );
+
+    await repository.deleteReminder(exchange.id);
+    expect(await repository.getReminder(exchange.id), null);
+  });
+
+  test(
+    'return transition atomically deletes its authoritative reminder',
+    () async {
+      final Exchange open = await add(
+        suffix: '8',
+        personName: 'Sam',
+        itemName: 'Drill',
+        direction: ExchangeDirection.lent,
+      );
+      await repository.saveReminder(
+        Reminder(
+          exchangeId: open.id,
+          requestedAt: base,
+          scheduledAt: base.add(const Duration(days: 2)),
+          platformSchedulingId: 88,
+          title: 'Reminder',
+          body: 'Drill is due',
+        ),
+      );
+      final (Exchange returned, ExchangeEvent event) = ExchangeTransitions(
+        clock: FixedClock(base.add(const Duration(days: 1))),
+        ids: SequenceIds(800),
+      ).markReturned(open);
+
+      await repository.saveTransitionAndReminder(
+        open,
+        returned,
+        event,
+        deleteReminder: true,
+      );
+
+      expect((await repository.get(open.id))!.status, ExchangeStatus.returned);
+      expect(await repository.getReminder(open.id), null);
+    },
+  );
+
   test(
     'return event and projection roll back together after injected failure',
     () async {
@@ -504,6 +588,63 @@ void main() {
     }
   });
 
+  test('migrates real v2 fixture to v3 without losing core data', () async {
+    await database.close();
+    database = LendLoopDatabase(
+      NativeDatabase.memory(setup: _createVersionTwoFixture),
+    );
+    repository = DriftExchangeRepository(database);
+
+    final Exchange migrated = (await repository.get(
+      ExchangeId('fixture-exchange'),
+    ))!;
+    expect(migrated.status, ExchangeStatus.open);
+    expect(
+      (await repository.events(migrated.id))
+          .map((ExchangeEvent e) => e.id.value),
+      <String>['fixture-event'],
+    );
+    expect(
+      (await repository.attachments(migrated.id)).single.relativePath,
+      'attachments/fixture.jpg',
+    );
+    expect(await repository.getReminder(migrated.id), null);
+
+    for (final String invalid in <String>[
+      "INSERT INTO reminders VALUES ('missing-exchange',$baseSeconds,$baseSeconds,7,'Reminder','body','pending')",
+      "INSERT INTO reminders VALUES ('fixture-exchange',$baseSeconds,$baseSeconds,8,'Reminder','body','unknown')",
+      "INSERT INTO exchanges VALUES ('bad-due','fixture-item','fixture-person','lent',$baseSeconds,${baseSeconds - 1},'open',NULL,$baseSeconds,$baseSeconds)",
+      "INSERT INTO exchange_events VALUES ('bad-type','fixture-exchange','invalid',$baseSeconds,NULL)",
+      "INSERT INTO attachments VALUES ('bad-path','fixture-exchange','fixture-item','../private.jpg','image/jpeg',1,'digest')",
+    ]) {
+      await expectLater(
+        database.customStatement(invalid),
+        throwsA(isA<sqlite.SqliteException>()),
+      );
+    }
+    final Reminder reminder = Reminder(
+      exchangeId: migrated.id,
+      requestedAt: base,
+      scheduledAt: base.add(const Duration(days: 1)),
+      platformSchedulingId: 7,
+      title: 'Reminder',
+      body: 'Fixture is due',
+    );
+    await repository.saveReminder(reminder);
+    expect((await repository.getReminder(migrated.id))!.body, 'Fixture is due');
+    final String reminderSql =
+        (await database
+                .customSelect(
+                  "SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'reminders'",
+                )
+                .getSingle())
+            .read<String>('sql')
+            .toLowerCase();
+    expect(reminderSql, contains("delivery_state in ('pending', 'scheduled')"));
+    await repository.deleteReminder(migrated.id);
+    expect(await repository.getReminder(migrated.id), null);
+  });
+
   test(
     'version 1 migration fails closed when legacy rows are invalid',
     () async {
@@ -557,4 +698,45 @@ void _createVersionOneFixture(sqlite.Database database) {
     "INSERT INTO exchange_events VALUES ('fixture-event','fixture-exchange','created',$timestamp,NULL)",
   );
   database.userVersion = 1;
+}
+
+void _createVersionTwoFixture(sqlite.Database database) {
+  database.execute('PRAGMA foreign_keys = ON');
+  database.execute(
+    'CREATE TABLE people (id TEXT NOT NULL PRIMARY KEY, display_name TEXT NOT NULL, private_note TEXT, created_at INTEGER NOT NULL, updated_at INTEGER NOT NULL)',
+  );
+  database.execute(
+    'CREATE TABLE items (id TEXT NOT NULL PRIMARY KEY, name TEXT NOT NULL, description TEXT, category TEXT, created_at INTEGER NOT NULL, updated_at INTEGER NOT NULL)',
+  );
+  database.execute(
+    "CREATE TABLE exchanges (id TEXT NOT NULL PRIMARY KEY, item_id TEXT NOT NULL REFERENCES items(id), person_id TEXT NOT NULL REFERENCES people(id), direction TEXT NOT NULL CHECK (direction IN ('lent', 'borrowed')), handed_off_at INTEGER NOT NULL, due_at INTEGER, status TEXT NOT NULL CHECK (status IN ('open', 'returned')), returned_at INTEGER, created_at INTEGER NOT NULL, updated_at INTEGER NOT NULL, CHECK (due_at IS NULL OR due_at >= handed_off_at), CHECK ((status = 'open' AND returned_at IS NULL) OR (status = 'returned' AND returned_at IS NOT NULL)))",
+  );
+  database.execute(
+    "CREATE TABLE exchange_events (id TEXT NOT NULL PRIMARY KEY, exchange_id TEXT NOT NULL REFERENCES exchanges(id), type TEXT NOT NULL CHECK (type IN ('created', 'edited', 'reminded', 'returned', 'reopened')), occurred_at INTEGER NOT NULL, metadata TEXT)",
+  );
+  database.execute(
+    "CREATE TABLE attachments (id TEXT NOT NULL PRIMARY KEY, exchange_id TEXT NOT NULL REFERENCES exchanges(id), item_id TEXT REFERENCES items(id), relative_path TEXT NOT NULL CHECK (relative_path <> '' AND relative_path NOT LIKE '/%' AND relative_path NOT LIKE '../%' AND relative_path NOT LIKE '%/../%'), media_type TEXT NOT NULL, byte_size INTEGER NOT NULL CHECK (byte_size >= 0), digest TEXT NOT NULL)",
+  );
+  database.execute(
+    'CREATE TABLE reminders (exchange_id TEXT NOT NULL PRIMARY KEY REFERENCES exchanges(id), requested_at INTEGER NOT NULL, platform_scheduling_id INTEGER NOT NULL UNIQUE, state TEXT NOT NULL)',
+  );
+  database.execute(
+    "INSERT INTO people VALUES ('fixture-person','Synthetic Person',NULL,$baseSeconds,$baseSeconds)",
+  );
+  database.execute(
+    "INSERT INTO items VALUES ('fixture-item','Synthetic Item',NULL,NULL,$baseSeconds,$baseSeconds)",
+  );
+  database.execute(
+    "INSERT INTO exchanges VALUES ('fixture-exchange','fixture-item','fixture-person','lent',$baseSeconds,NULL,'open',NULL,$baseSeconds,$baseSeconds)",
+  );
+  database.execute(
+    "INSERT INTO exchange_events VALUES ('fixture-event','fixture-exchange','created',$baseSeconds,NULL)",
+  );
+  database.execute(
+    "INSERT INTO attachments VALUES ('fixture-attachment','fixture-exchange','fixture-item','attachments/fixture.jpg','image/jpeg',123,'digest')",
+  );
+  database.execute(
+    "INSERT INTO reminders VALUES ('fixture-exchange',$baseSeconds,99,'enabled')",
+  );
+  database.userVersion = 2;
 }
