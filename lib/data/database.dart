@@ -91,8 +91,13 @@ class Attachments extends Table {
 class Reminders extends Table {
   TextColumn get exchangeId => text().references(Exchanges, #id)();
   DateTimeColumn get requestedAt => dateTime()();
+  DateTimeColumn get scheduledAt => dateTime()();
   IntColumn get platformSchedulingId => integer().unique()();
-  TextColumn get state => text().withLength(min: 1)();
+  TextColumn get title => text().withLength(min: 1)();
+  TextColumn get body => text().withLength(min: 1)();
+  TextColumn get deliveryState => text().customConstraint(
+    "NOT NULL CHECK (delivery_state IN ('pending', 'scheduled'))",
+  )();
   @override
   Set<Column<Object>> get primaryKey => <Column<Object>>{exchangeId};
 }
@@ -114,7 +119,7 @@ class LendLoopDatabase extends _$LendLoopDatabase {
   final Future<void> Function()? beforeProjectionUpdate;
 
   @override
-  int get schemaVersion => 2;
+  int get schemaVersion => 3;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -128,6 +133,12 @@ class LendLoopDatabase extends _$LendLoopDatabase {
         await migrator.createTable(attachments);
         await migrator.createTable(reminders);
         await _createIndexes();
+      }
+      if (from >= 2 && from < 3) {
+        // Version 2 did not retain enough information to safely recreate a
+        // reminder after an OS restart, so discard those incomplete rows.
+        await migrator.deleteTable('reminders');
+        await migrator.createTable(reminders);
       }
     },
     beforeOpen: (OpeningDetails details) async {
@@ -193,7 +204,8 @@ FROM exchange_events_v1
   }
 }
 
-final class DriftExchangeRepository implements domain.ExchangeRepository {
+final class DriftExchangeRepository
+    implements domain.ExchangeRepository, domain.ReminderRepository {
   const DriftExchangeRepository(this.database);
   final LendLoopDatabase database;
 
@@ -338,6 +350,12 @@ final class DriftExchangeRepository implements domain.ExchangeRepository {
     if (query.dueBefore != null) {
       add(' AND e.due_at IS NOT NULL AND e.due_at <= ?', query.dueBefore!);
     }
+    if (query.handedOffFrom != null) {
+      add(' AND e.handed_off_at >= ?', query.handedOffFrom!);
+    }
+    if (query.handedOffThrough != null) {
+      add(' AND e.handed_off_at <= ?', query.handedOffThrough!);
+    }
     final String text = query.text?.trim() ?? '';
     if (text.isNotEmpty) {
       sql.write(
@@ -412,7 +430,16 @@ final class DriftExchangeRepository implements domain.ExchangeRepository {
     domain.Exchange previous,
     domain.Exchange next,
     domain.ExchangeEvent event,
-  ) => database.transaction(() async {
+  ) => saveTransitionAndReminder(previous, next, event);
+
+  @override
+  Future<void> saveTransitionAndReminder(
+    domain.Exchange previous,
+    domain.Exchange next,
+    domain.ExchangeEvent event, {
+    domain.Reminder? reminder,
+    bool deleteReminder = false,
+  }) => database.transaction(() async {
     if (previous.id != next.id || event.exchangeId != next.id) {
       throw const domain.InvalidValue(
         'Previous, next, and transition event exchange IDs must match.',
@@ -451,6 +478,19 @@ final class DriftExchangeRepository implements domain.ExchangeRepository {
         'The exchange changed while this transition was being saved.',
       );
     }
+    if (deleteReminder) {
+      await (database.delete(
+            database.reminders,
+          )..where((Reminders table) => table.exchangeId.equals(next.id.value)))
+          .go();
+    } else if (reminder != null) {
+      if (reminder.exchangeId != next.id) {
+        throw const domain.InvalidValue(
+          'Reminder must belong to the transitioned exchange.',
+        );
+      }
+      await saveReminder(reminder);
+    }
   });
 
   @override
@@ -467,6 +507,49 @@ final class DriftExchangeRepository implements domain.ExchangeRepository {
           digest: attachment.digest,
         ),
       );
+
+  @override
+  Future<domain.Reminder?> getReminder(domain.ExchangeId id) async {
+    final ReminderRow? row =
+        await (database.select(database.reminders)
+              ..where((Reminders table) => table.exchangeId.equals(id.value)))
+            .getSingleOrNull();
+    return row == null ? null : _reminder(row);
+  }
+
+  @override
+  Future<List<domain.Reminder>> reminders() async =>
+      (await database.select(database.reminders).get())
+          .map(_reminder)
+          .toList(growable: false);
+
+  @override
+  Future<void> saveReminder(domain.Reminder reminder) => database
+      .into(database.reminders)
+      .insertOnConflictUpdate(
+        RemindersCompanion.insert(
+          exchangeId: reminder.exchangeId.value,
+          requestedAt: reminder.requestedAt,
+          scheduledAt: reminder.scheduledAt,
+          platformSchedulingId: reminder.platformSchedulingId,
+          title: reminder.title,
+          body: reminder.body,
+          deliveryState: reminder.deliveryState.name,
+        ),
+      );
+
+  @override
+  Future<void> deleteReminder(domain.ExchangeId id) => (database.delete(
+    database.reminders,
+  )..where((Reminders table) => table.exchangeId.equals(id.value))).go();
+
+  @override
+  Future<bool> reminderEligible(domain.ExchangeId id) async {
+    final ExchangeRow? row = await (database.select(
+      database.exchanges,
+    )..where((Exchanges table) => table.id.equals(id.value))).getSingleOrNull();
+    return row?.status == domain.ExchangeStatus.open.name;
+  }
 }
 
 String _escapeLike(String value) => value
@@ -516,6 +599,16 @@ domain.ExchangeEvent _event(ExchangeEventRow row) => domain.ExchangeEvent(
   type: domain.ExchangeEventType.values.byName(row.type),
   occurredAt: row.occurredAt,
   metadata: row.metadata,
+);
+
+domain.Reminder _reminder(ReminderRow row) => domain.Reminder(
+  exchangeId: domain.ExchangeId(row.exchangeId),
+  requestedAt: row.requestedAt,
+  scheduledAt: row.scheduledAt,
+  platformSchedulingId: row.platformSchedulingId,
+  title: row.title,
+  body: row.body,
+  deliveryState: domain.ReminderDeliveryState.values.byName(row.deliveryState),
 );
 
 void _validateTransition(

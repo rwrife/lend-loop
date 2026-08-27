@@ -224,17 +224,43 @@ String validateRelativePath(String path) {
   return value;
 }
 
+enum ReminderDeliveryState { pending, scheduled }
+
 final class Reminder {
   const Reminder({
     required this.exchangeId,
     required this.requestedAt,
+    required this.scheduledAt,
     required this.platformSchedulingId,
-    required this.state,
+    required this.title,
+    required this.body,
+    this.deliveryState = ReminderDeliveryState.scheduled,
   });
   final ExchangeId exchangeId;
   final DateTime requestedAt;
+  final DateTime scheduledAt;
   final int platformSchedulingId;
-  final String state;
+  final String title;
+  final String body;
+  final ReminderDeliveryState deliveryState;
+
+  Reminder withDeliveryState(ReminderDeliveryState value) => Reminder(
+    exchangeId: exchangeId,
+    requestedAt: requestedAt,
+    scheduledAt: scheduledAt,
+    platformSchedulingId: platformSchedulingId,
+    title: title,
+    body: body,
+    deliveryState: value,
+  );
+}
+
+abstract interface class ReminderRepository {
+  Future<Reminder?> getReminder(ExchangeId id);
+  Future<List<Reminder>> reminders();
+  Future<void> saveReminder(Reminder reminder);
+  Future<void> deleteReminder(ExchangeId id);
+  Future<bool> reminderEligible(ExchangeId id);
 }
 
 final class ExchangeTransitions {
@@ -361,15 +387,19 @@ final class ExchangeQuery {
     this.personId,
     this.text,
     this.dueBefore,
+    this.handedOffFrom,
+    this.handedOffThrough,
   });
   final ExchangeStatus? status;
   final ExchangeDirection? direction;
   final PersonId? personId;
   final String? text;
   final DateTime? dueBefore;
+  final DateTime? handedOffFrom;
+  final DateTime? handedOffThrough;
 }
 
-abstract interface class ExchangeRepository {
+abstract interface class ExchangeRepository implements ReminderRepository {
   Future<void> create(
     PersonAlias person,
     Item item,
@@ -388,5 +418,12 @@ abstract interface class ExchangeRepository {
     Exchange next,
     ExchangeEvent event,
   );
+  Future<void> saveTransitionAndReminder(
+    Exchange previous,
+    Exchange next,
+    ExchangeEvent event, {
+    Reminder? reminder,
+    bool deleteReminder = false,
+  });
   Future<void> addAttachment(Attachment attachment);
 }

@@ -1,7 +1,9 @@
+import 'dart:async';
 import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:lend_loop/application/exchange_workflow.dart';
+import 'package:lend_loop/application/reminder_coordinator.dart';
 import 'package:lend_loop/domain/exchange_domain.dart';
 import 'package:lend_loop/platform/photo_adapter.dart';
 
@@ -10,12 +12,14 @@ class ExchangeDetailsScreen extends StatefulWidget {
     required this.exchangeId,
     required this.workflow,
     required this.photoAdapter,
+    this.reminderCoordinator,
     super.key,
   });
 
   final ExchangeId exchangeId;
   final ExchangeWorkflow workflow;
   final PhotoAdapter photoAdapter;
+  final ReminderCoordinator? reminderCoordinator;
 
   @override
   State<ExchangeDetailsScreen> createState() => _ExchangeDetailsScreenState();
@@ -23,11 +27,28 @@ class ExchangeDetailsScreen extends StatefulWidget {
 
 class _ExchangeDetailsScreenState extends State<ExchangeDetailsScreen> {
   late Future<ExchangeRecord> _record;
+  String? _reminderDeliveryStatus;
+  bool _reminderDeliveryPending = false;
 
   @override
   void initState() {
     super.initState();
     _record = widget.workflow.details(widget.exchangeId);
+    unawaited(_loadReminderDeliveryState());
+  }
+
+  Future<void> _loadReminderDeliveryState() async {
+    final Reminder? reminder = await widget.reminderCoordinator?.reminder(
+      widget.exchangeId,
+    );
+    if (!mounted || reminder?.deliveryState != ReminderDeliveryState.pending) {
+      return;
+    }
+    setState(() {
+      _reminderDeliveryPending = true;
+      _reminderDeliveryStatus =
+          'Reminder saved, but delivery is pending. Retry reminder delivery.';
+    });
   }
 
   Future<void> _return() async {
@@ -35,6 +56,11 @@ class _ExchangeDetailsScreenState extends State<ExchangeDetailsScreen> {
       final ExchangeRecord returned = await widget.workflow.markReturned(
         widget.exchangeId,
       );
+      try {
+        await widget.reminderCoordinator?.reconcile();
+      } on Object {
+        // The return and authoritative reminder deletion already committed.
+      }
       if (!mounted) return;
       setState(() {
         _record = Future<ExchangeRecord>.value(returned);
@@ -134,6 +160,16 @@ class _ExchangeDetailsScreenState extends State<ExchangeDetailsScreen> {
                     ? 'Due date: None'
                     : 'Due date: ${_formatDate(record.exchange.dueAt!)}',
               ),
+              if (record.exchange.status == ExchangeStatus.open)
+                Align(
+                  alignment: AlignmentDirectional.centerStart,
+                  child: TextButton.icon(
+                    key: const Key('editDueDateButton'),
+                    onPressed: () => _editDueDate(record),
+                    icon: const Icon(Icons.edit_calendar_outlined),
+                    label: const Text('Edit due date'),
+                  ),
+                ),
               if (record.item.description != null) ...<Widget>[
                 const SizedBox(height: 16),
                 Text('Notes', style: Theme.of(context).textTheme.titleMedium),
@@ -144,6 +180,39 @@ class _ExchangeDetailsScreenState extends State<ExchangeDetailsScreen> {
               const SizedBox(height: 8),
               _PhotoPanel(record: record, adapter: widget.photoAdapter),
               const SizedBox(height: 24),
+              if (record.exchange.status == ExchangeStatus.open &&
+                  record.exchange.dueAt != null &&
+                  record.dueState != DueState.overdue &&
+                  widget.reminderCoordinator != null) ...<Widget>[
+                if (_reminderDeliveryStatus != null) ...<Widget>[
+                  Semantics(
+                    container: true,
+                    liveRegion: true,
+                    label: _reminderDeliveryStatus,
+                    child: ExcludeSemantics(
+                      child: Text(_reminderDeliveryStatus!),
+                    ),
+                  ),
+                  if (_reminderDeliveryPending)
+                    Align(
+                      alignment: AlignmentDirectional.centerStart,
+                      child: TextButton.icon(
+                        key: const Key('retryReminderDeliveryButton'),
+                        onPressed: _retryReminderDelivery,
+                        icon: const Icon(Icons.refresh),
+                        label: const Text('Retry reminder delivery'),
+                      ),
+                    ),
+                  const SizedBox(height: 12),
+                ],
+                OutlinedButton.icon(
+                  key: const Key('enableReminderButton'),
+                  onPressed: () => _enableReminder(record),
+                  icon: const Icon(Icons.notifications_outlined),
+                  label: const Text('Enable due reminder'),
+                ),
+                const SizedBox(height: 12),
+              ],
               if (record.exchange.status == ExchangeStatus.open)
                 FilledButton.icon(
                   key: const Key('markReturnedButton'),
@@ -173,6 +242,101 @@ class _ExchangeDetailsScreenState extends State<ExchangeDetailsScreen> {
         },
       ),
     );
+  }
+
+  Future<void> _enableReminder(ExchangeRecord record) async {
+    final ReminderEnableResult result = await widget.reminderCoordinator!
+        .enable(
+          exchangeId: record.exchange.id,
+          itemName: record.item.name,
+          personName: record.person.displayName,
+          scheduledAt: record.exchange.dueAt!,
+        );
+    if (!mounted) return;
+    if (result == ReminderEnableResult.savedDeliveryPending) {
+      setState(() {
+        _reminderDeliveryPending = true;
+        _reminderDeliveryStatus =
+            'Reminder saved, but delivery is pending. Retry reminder delivery.';
+      });
+      return;
+    }
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(switch (result) {
+          ReminderEnableResult.enabled =>
+            'Reminder enabled for ${_formatDate(record.exchange.dueAt!)}.',
+          ReminderEnableResult.savedDeliveryPending => throw StateError(
+            'Handled as persistent status.',
+          ),
+          ReminderEnableResult.denied =>
+            'Notifications are off. Your exchange is still available.',
+        }),
+      ),
+    );
+  }
+
+  Future<void> _retryReminderDelivery() async {
+    try {
+      await widget.reminderCoordinator!.reconcile();
+      if (!mounted) return;
+      setState(() {
+        _reminderDeliveryPending = false;
+        _reminderDeliveryStatus = 'Reminder delivery restored.';
+      });
+    } on Object {
+      if (!mounted) return;
+      setState(() {
+        _reminderDeliveryPending = true;
+        _reminderDeliveryStatus =
+            'Retry failed. Reminder delivery is still pending.';
+      });
+    }
+  }
+
+  Future<void> _editDueDate(ExchangeRecord record) async {
+    final DateTime? selected = await showDatePicker(
+      context: context,
+      firstDate: record.exchange.handedOffAt,
+      lastDate: DateTime(2100),
+      initialDate: record.exchange.dueAt ?? record.exchange.handedOffAt,
+      helpText: 'Choose due date',
+    );
+    if (selected == null || !mounted) return;
+    try {
+      final ExchangeRecord edited = await widget.workflow.editDueDate(
+        widget.exchangeId,
+        selected,
+      );
+      final ReminderUpdateResult? reminderResult = await widget
+          .reminderCoordinator
+          ?.update(
+            exchangeId: edited.exchange.id,
+            itemName: edited.item.name,
+            personName: edited.person.displayName,
+            scheduledAt: selected,
+          );
+      if (mounted) {
+        setState(() {
+          _record = Future<ExchangeRecord>.value(edited);
+          if (reminderResult == ReminderUpdateResult.savedDeliveryPending) {
+            _reminderDeliveryPending = true;
+            _reminderDeliveryStatus =
+                'Due date saved, but reminder delivery is pending. '
+                'Retry reminder delivery.';
+          } else if (reminderResult == ReminderUpdateResult.updated) {
+            _reminderDeliveryPending = false;
+            _reminderDeliveryStatus = 'Due date and reminder updated.';
+          }
+        });
+      }
+    } on Object {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Could not update the due date.')),
+        );
+      }
+    }
   }
 }
 

@@ -2,6 +2,25 @@ import 'package:lend_loop/domain/exchange_domain.dart';
 
 enum OpenExchangeFilter { all, dueSoon, overdue, returned }
 
+final class ExchangeSearchFilter {
+  const ExchangeSearchFilter({
+    this.text,
+    this.personId,
+    this.personName,
+    this.direction,
+    this.status,
+    this.from,
+    this.through,
+  });
+  final String? text;
+  final PersonId? personId;
+  final String? personName;
+  final ExchangeDirection? direction;
+  final ExchangeStatus? status;
+  final DateTime? from;
+  final DateTime? through;
+}
+
 final class HandoffDraft {
   const HandoffDraft({
     required this.direction,
@@ -143,12 +162,71 @@ final class ExchangeWorkflow {
     return _hydrate(exchange);
   }
 
+  Future<List<ExchangeRecord>> search(ExchangeSearchFilter filter) async {
+    final List<Exchange> exchanges = await repository.find(
+      ExchangeQuery(
+        text: filter.text,
+        personId: filter.personId,
+        direction: filter.direction,
+        status: filter.status,
+        handedOffFrom: filter.from,
+        handedOffThrough: filter.through,
+      ),
+    );
+    final List<ExchangeRecord> records = await Future.wait(
+      exchanges.map(_hydrate),
+    );
+    final String person = filter.personName?.trim().toLowerCase() ?? '';
+    return person.isEmpty
+        ? records
+        : records
+              .where(
+                (ExchangeRecord value) =>
+                    value.person.displayName.toLowerCase().contains(person),
+              )
+              .toList(growable: false);
+  }
+
   Future<ExchangeRecord> markReturned(ExchangeId id) async {
     final ExchangeRecord record = await details(id);
     final (Exchange next, ExchangeEvent event) = _transitions.markReturned(
       record.exchange,
     );
-    await repository.saveTransition(record.exchange, next, event);
+    await repository.saveTransitionAndReminder(
+      record.exchange,
+      next,
+      event,
+      deleteReminder: true,
+    );
+    return _hydrate(next);
+  }
+
+  Future<ExchangeRecord> editDueDate(ExchangeId id, DateTime? dueAt) async {
+    final ExchangeRecord record = await details(id);
+    final (Exchange next, ExchangeEvent event) = _transitions.edit(
+      record.exchange,
+      dueAt: dueAt,
+      clearDueAt: dueAt == null,
+    );
+    final Reminder? existing = await repository.getReminder(id);
+    final Reminder? updatedReminder = existing == null || dueAt == null
+        ? null
+        : Reminder(
+            exchangeId: id,
+            requestedAt: clock.now(),
+            scheduledAt: dueAt,
+            platformSchedulingId: existing.platformSchedulingId,
+            title: existing.title,
+            body: existing.body,
+            deliveryState: ReminderDeliveryState.pending,
+          );
+    await repository.saveTransitionAndReminder(
+      record.exchange,
+      next,
+      event,
+      reminder: updatedReminder,
+      deleteReminder: existing != null && dueAt == null,
+    );
     return _hydrate(next);
   }
 

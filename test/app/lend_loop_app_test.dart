@@ -80,6 +80,26 @@ final class FailingExchangeRepository implements ExchangeRepository {
     Exchange next,
     ExchangeEvent event,
   ) async => throw _error;
+
+  @override
+  Future<void> saveTransitionAndReminder(
+    Exchange previous,
+    Exchange next,
+    ExchangeEvent event, {
+    Reminder? reminder,
+    bool deleteReminder = false,
+  }) async => throw _error;
+
+  @override
+  Future<void> deleteReminder(ExchangeId id) async => throw _error;
+  @override
+  Future<Reminder?> getReminder(ExchangeId id) async => throw _error;
+  @override
+  Future<bool> reminderEligible(ExchangeId id) async => throw _error;
+  @override
+  Future<List<Reminder>> reminders() async => throw _error;
+  @override
+  Future<void> saveReminder(Reminder reminder) async => throw _error;
 }
 
 void main() {
