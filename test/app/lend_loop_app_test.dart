@@ -27,6 +27,7 @@ final class SequenceIds implements IdGenerator {
 
 final class DeniedPhotoAdapter implements PhotoAdapter {
   int requests = 0;
+  final List<String> discarded = <String>[];
 
   @override
   Future<PhotoPickResult> pickPhoto() async {
@@ -35,7 +36,18 @@ final class DeniedPhotoAdapter implements PhotoAdapter {
   }
 
   @override
-  Future<void> discard(String relativePath) async {}
+  Future<void> discard(String relativePath) async =>
+      discarded.add(relativePath);
+
+  @override
+  Future<bool> deleteWithRollback(
+    Iterable<String> relativePaths,
+    Future<void> Function() deleteDatabase,
+  ) async {
+    await deleteDatabase();
+    discarded.addAll(relativePaths);
+    return true;
+  }
 
   @override
   Future<String?> resolve(String relativePath) async => null;
@@ -92,6 +104,12 @@ final class FailingExchangeRepository implements ExchangeRepository {
 
   @override
   Future<void> deleteReminder(ExchangeId id) async => throw _error;
+  @override
+  Future<Attachment> deleteAttachment(AttachmentId id) async => throw _error;
+  @override
+  Future<List<Attachment>> deleteExchange(ExchangeId id) async => throw _error;
+  @override
+  Future<List<Attachment>> deleteAllLocalData() async => throw _error;
   @override
   Future<Reminder?> getReminder(ExchangeId id) async => throw _error;
   @override
@@ -367,5 +385,56 @@ void main() {
 
     expect(find.text('Could not mark this exchange returned.'), findsOneWidget);
     expect(find.text('Status: Open'), findsOneWidget);
+  });
+
+  testWidgets('requires confirmation to delete a photo and an exchange', (
+    WidgetTester tester,
+  ) async {
+    tester.view.physicalSize = const Size(800, 1000);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    await workflow.recordHandoff(
+      HandoffDraft(
+        direction: ExchangeDirection.lent,
+        itemName: 'Camera',
+        personName: 'Morgan',
+        handedOffAt: DateTime.utc(2026, 8, 25),
+      ),
+      attachment: const AttachmentDraft(
+        relativePath: 'attachments/camera.jpg',
+        mediaType: 'image/jpeg',
+        byteSize: 10,
+        digest: 'digest',
+      ),
+    );
+    await tester.pumpWidget(
+      LendLoopApp(workflow: workflow, photoAdapter: photos),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('You lent Camera to Morgan'));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byKey(const Key('deletePhotoButton')));
+    await tester.pumpAndSettle();
+    expect(find.text('Delete this photo?'), findsOneWidget);
+    await tester.tap(find.byKey(const Key('confirmDeletePhotoButton')));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 500));
+    await tester.pumpAndSettle();
+    expect((await workflow.openExchanges()).single.attachments, isEmpty);
+    expect(photos.discarded, <String>['attachments/camera.jpg']);
+
+    await tester.scrollUntilVisible(
+      find.byKey(const Key('deleteExchangeButton')),
+      300,
+      scrollable: find.byType(Scrollable).last,
+    );
+    await tester.tap(find.byKey(const Key('deleteExchangeButton')));
+    await tester.pumpAndSettle();
+    expect(find.text('Delete this exchange?'), findsOneWidget);
+    await tester.tap(find.byKey(const Key('confirmDeleteExchangeButton')));
+    await tester.pumpAndSettle();
+    expect(find.text('No open exchanges'), findsOneWidget);
   });
 }

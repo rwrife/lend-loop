@@ -121,6 +121,128 @@ class _ExchangeDetailsScreenState extends State<ExchangeDetailsScreen> {
     }
   }
 
+  Future<void> _deletePhoto(ExchangeRecord record) async {
+    final Attachment attachment = record.attachments.first;
+    final bool confirmed =
+        await showDialog<bool>(
+          context: context,
+          builder: (BuildContext context) => AlertDialog(
+            title: const Text('Delete this photo?'),
+            content: const Text(
+              'The exchange and its text history will remain on this device.',
+            ),
+            actions: <Widget>[
+              TextButton(
+                onPressed: () => Navigator.pop(context, false),
+                child: const Text('Cancel'),
+              ),
+              FilledButton(
+                key: const Key('confirmDeletePhotoButton'),
+                onPressed: () => Navigator.pop(context, true),
+                child: const Text('Delete photo'),
+              ),
+            ],
+          ),
+        ) ??
+        false;
+    if (!confirmed) return;
+    bool cleanupComplete;
+    try {
+      cleanupComplete = await widget.photoAdapter.deleteWithRollback(<String>[
+        attachment.relativePath,
+      ], () async => widget.workflow.deleteAttachment(attachment.id));
+    } on Object {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Could not delete this photo record.')),
+        );
+      }
+      return;
+    }
+    if (!mounted) return;
+    setState(() {
+      _record = widget.workflow.details(widget.exchangeId);
+    });
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            cleanupComplete ? 'Photo deleted. The text record remains.' : 'The photo record was deleted, but its private file could not be removed.',
+          ),
+        ),
+      );
+    }
+  }
+
+  Future<void> _deleteExchange() async {
+    final bool confirmed =
+        await showDialog<bool>(
+          context: context,
+          builder: (BuildContext context) => AlertDialog(
+            title: const Text('Delete this exchange?'),
+            content: const Text(
+              'This permanently removes the exchange, its complete event history, '
+              'reminder, and attachments from this device.',
+            ),
+            actions: <Widget>[
+              TextButton(
+                onPressed: () => Navigator.pop(context, false),
+                child: const Text('Cancel'),
+              ),
+              FilledButton(
+                key: const Key('confirmDeleteExchangeButton'),
+                onPressed: () => Navigator.pop(context, true),
+                child: const Text('Delete exchange'),
+              ),
+            ],
+          ),
+        ) ??
+        false;
+    if (!confirmed) return;
+    final ExchangeRecord record;
+    try {
+      record = await widget.workflow.details(widget.exchangeId);
+    } on Object {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Could not delete this exchange.')),
+        );
+      }
+      return;
+    }
+
+    bool cleanupFailed;
+    try {
+      cleanupFailed = !await widget.photoAdapter.deleteWithRollback(
+        record.attachments.map((Attachment value) => value.relativePath),
+        () async => widget.workflow.deleteExchange(widget.exchangeId),
+      );
+    } on Object {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Could not delete this exchange.')),
+        );
+      }
+      return;
+    }
+    try {
+      await widget.reminderCoordinator?.reconcile();
+    } on Object {
+      cleanupFailed = true;
+    }
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(
+          cleanupFailed
+              ? 'Exchange deleted, but some device cleanup could not be completed.'
+              : 'Exchange and its local data were deleted.',
+        ),
+      ),
+    );
+    Navigator.pop(context);
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -179,6 +301,16 @@ class _ExchangeDetailsScreenState extends State<ExchangeDetailsScreen> {
               Text('Photo', style: Theme.of(context).textTheme.titleMedium),
               const SizedBox(height: 8),
               _PhotoPanel(record: record, adapter: widget.photoAdapter),
+              if (record.attachments.isNotEmpty)
+                Align(
+                  alignment: AlignmentDirectional.centerStart,
+                  child: TextButton.icon(
+                    key: const Key('deletePhotoButton'),
+                    onPressed: () => _deletePhoto(record),
+                    icon: const Icon(Icons.delete_outline),
+                    label: const Text('Delete photo'),
+                  ),
+                ),
               const SizedBox(height: 24),
               if (record.exchange.status == ExchangeStatus.open &&
                   record.exchange.dueAt != null &&
@@ -237,6 +369,13 @@ class _ExchangeDetailsScreenState extends State<ExchangeDetailsScreen> {
                   title: Text(_eventLabel(event.type)),
                   subtitle: Text(_formatDateTime(event.occurredAt)),
                 ),
+              const SizedBox(height: 24),
+              OutlinedButton.icon(
+                key: const Key('deleteExchangeButton'),
+                onPressed: _deleteExchange,
+                icon: const Icon(Icons.delete_forever_outlined),
+                label: const Text('Delete exchange'),
+              ),
             ],
           );
         },

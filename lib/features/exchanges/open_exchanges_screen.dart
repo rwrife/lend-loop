@@ -2,9 +2,12 @@ import 'package:flutter/material.dart';
 import 'package:flutter/semantics.dart';
 import 'package:lend_loop/application/exchange_workflow.dart';
 import 'package:lend_loop/application/reminder_coordinator.dart';
+import 'package:lend_loop/data/backup_service.dart';
 import 'package:lend_loop/domain/exchange_domain.dart';
+import 'package:lend_loop/features/data/data_privacy_screen.dart';
 import 'package:lend_loop/features/exchanges/exchange_details_screen.dart';
 import 'package:lend_loop/features/exchanges/record_handoff_screen.dart';
+import 'package:lend_loop/platform/backup_file_adapter.dart';
 import 'package:lend_loop/platform/photo_adapter.dart';
 
 class OpenExchangesScreen extends StatefulWidget {
@@ -14,6 +17,8 @@ class OpenExchangesScreen extends StatefulWidget {
     this.reminderCoordinator,
     this.notificationFeatureMessage,
     this.onRetryNotificationSetup,
+    this.backups,
+    this.backupFiles,
     super.key,
   });
 
@@ -22,6 +27,8 @@ class OpenExchangesScreen extends StatefulWidget {
   final ReminderCoordinator? reminderCoordinator;
   final String? notificationFeatureMessage;
   final Future<void> Function()? onRetryNotificationSetup;
+  final BackupService? backups;
+  final BackupFileAdapter? backupFiles;
 
   @override
   State<OpenExchangesScreen> createState() => _OpenExchangesScreenState();
@@ -88,10 +95,36 @@ class _OpenExchangesScreenState extends State<OpenExchangesScreen> {
     if (mounted) setState(_reload);
   }
 
+  Future<void> _openDataPrivacy() async {
+    await Navigator.of(context).push<void>(
+      MaterialPageRoute<void>(
+        builder: (BuildContext context) => DataPrivacyScreen(
+          backups: widget.backups!,
+          files: widget.backupFiles!,
+          workflow: widget.workflow,
+          photos: widget.photoAdapter,
+          reconcileReminders: widget.reminderCoordinator?.reconcile,
+        ),
+      ),
+    );
+    if (mounted) setState(_reload);
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('Exchanges')),
+      appBar: AppBar(
+        title: const Text('Exchanges'),
+        actions: <Widget>[
+          if (widget.backups != null && widget.backupFiles != null)
+            IconButton(
+              key: const Key('dataPrivacyButton'),
+              tooltip: 'Data and privacy',
+              onPressed: _openDataPrivacy,
+              icon: const Icon(Icons.security_outlined),
+            ),
+        ],
+      ),
       floatingActionButton: FloatingActionButton.extended(
         key: const Key('recordHandoffButton'),
         onPressed: _record,

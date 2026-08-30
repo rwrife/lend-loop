@@ -426,4 +426,7 @@ abstract interface class ExchangeRepository implements ReminderRepository {
     bool deleteReminder = false,
   });
   Future<void> addAttachment(Attachment attachment);
+  Future<Attachment> deleteAttachment(AttachmentId id);
+  Future<List<Attachment>> deleteExchange(ExchangeId id);
+  Future<List<Attachment>> deleteAllLocalData();
 }

@@ -30,6 +30,15 @@ final class _Photos implements PhotoAdapter {
   @override
   Future<void> discard(String relativePath) async {}
   @override
+  Future<bool> deleteWithRollback(
+    Iterable<String> relativePaths,
+    Future<void> Function() deleteDatabase,
+  ) async {
+    await deleteDatabase();
+    return true;
+  }
+
+  @override
   Future<PhotoPickResult> pickPhoto() async =>
       const PhotoPickResult.cancelled();
   @override

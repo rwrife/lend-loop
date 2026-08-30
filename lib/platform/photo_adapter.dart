@@ -38,4 +38,12 @@ abstract interface class PhotoAdapter {
 
   /// Removes a prepared photo that was not committed to a record.
   Future<void> discard(String relativePath);
+
+  /// Stages [relativePaths], runs the database deletion, and restores the
+  /// files if that deletion fails. Returns false when committed database work
+  /// succeeded but staged-file cleanup was only partially successful.
+  Future<bool> deleteWithRollback(
+    Iterable<String> relativePaths,
+    Future<void> Function() deleteDatabase,
+  );
 }

@@ -284,6 +284,53 @@ void main() {
     },
   );
 
+  test(
+    'deletion commands remove records but return attachment paths',
+    () async {
+      final ExchangeRecord saved = await workflow.recordHandoff(
+        HandoffDraft(
+          direction: ExchangeDirection.lent,
+          itemName: 'Camera',
+          personName: 'Morgan',
+          handedOffAt: clock.now(),
+        ),
+        attachment: const AttachmentDraft(
+          relativePath: 'attachments/camera.jpg',
+          mediaType: 'image/jpeg',
+          byteSize: 12,
+          digest: 'digest',
+        ),
+      );
+
+      expect(
+        await workflow.deleteAttachment(saved.attachments.single.id),
+        'attachments/camera.jpg',
+      );
+      expect((await workflow.details(saved.exchange.id)).attachments, isEmpty);
+      expect(await workflow.deleteExchange(saved.exchange.id), isEmpty);
+      expect(await workflow.openExchanges(), isEmpty);
+
+      final ExchangeRecord another = await workflow.recordHandoff(
+        HandoffDraft(
+          direction: ExchangeDirection.borrowed,
+          itemName: 'Book',
+          personName: 'Alex',
+          handedOffAt: clock.now(),
+        ),
+        attachment: const AttachmentDraft(
+          relativePath: 'attachments/book.jpg',
+          mediaType: 'image/jpeg',
+          byteSize: 2,
+          digest: 'digest',
+        ),
+      );
+      expect(await workflow.deleteAllLocalData(), <String>[
+        another.attachments.single.relativePath,
+      ]);
+      expect(await workflow.openExchanges(), isEmpty);
+    },
+  );
+
   test('search combines person text with handoff date bounds', () async {
     final ExchangeRecord matching = await workflow.recordHandoff(
       HandoffDraft(

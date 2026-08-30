@@ -3,9 +3,11 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:lend_loop/application/exchange_workflow.dart';
 import 'package:lend_loop/application/reminder_coordinator.dart';
+import 'package:lend_loop/data/backup_service.dart';
 import 'package:lend_loop/domain/exchange_domain.dart';
 import 'package:lend_loop/features/exchanges/exchange_details_screen.dart';
 import 'package:lend_loop/features/exchanges/open_exchanges_screen.dart';
+import 'package:lend_loop/platform/backup_file_adapter.dart';
 import 'package:lend_loop/platform/notification_adapter.dart';
 import 'package:lend_loop/platform/photo_adapter.dart';
 
@@ -17,6 +19,8 @@ class LendLoopApp extends StatefulWidget {
     this.notificationTaps,
     this.notificationFeatureMessage,
     this.retryNotificationSetup,
+    this.backups,
+    this.backupFiles,
     super.key,
   });
 
@@ -26,6 +30,8 @@ class LendLoopApp extends StatefulWidget {
   final NotificationTapSource? notificationTaps;
   final String? notificationFeatureMessage;
   final Future<void> Function()? retryNotificationSetup;
+  final BackupService? backups;
+  final BackupFileAdapter? backupFiles;
 
   @override
   State<LendLoopApp> createState() => _LendLoopAppState();
@@ -158,6 +164,8 @@ class _LendLoopAppState extends State<LendLoopApp> {
         onRetryNotificationSetup: widget.retryNotificationSetup == null
             ? null
             : _retryNotificationSetup,
+        backups: widget.backups,
+        backupFiles: widget.backupFiles,
       ),
     );
   }
