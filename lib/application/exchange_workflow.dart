@@ -239,6 +239,34 @@ final class ExchangeWorkflow {
     return _hydrate(next);
   }
 
+  Future<String> deleteAttachment(AttachmentId id) async {
+    final Attachment removed = await repository.deleteAttachment(id);
+    return removed.relativePath;
+  }
+
+  Future<List<String>> allAttachmentPaths() async {
+    final List<String> paths = <String>[];
+    for (final Exchange exchange in await repository.find(
+      const ExchangeQuery(),
+    )) {
+      paths.addAll(
+        (await repository.attachments(exchange.id))
+            .map((Attachment value) => value.relativePath),
+      );
+    }
+    return paths;
+  }
+
+  Future<List<String>> deleteExchange(ExchangeId id) async =>
+      (await repository.deleteExchange(id))
+          .map((Attachment value) => value.relativePath)
+          .toList(growable: false);
+
+  Future<List<String>> deleteAllLocalData() async =>
+      (await repository.deleteAllLocalData())
+          .map((Attachment value) => value.relativePath)
+          .toList(growable: false);
+
   Future<ExchangeRecord> _hydrate(Exchange exchange) async {
     final (PersonAlias? person, Item? item) = await (
       repository.getPerson(exchange.personId),

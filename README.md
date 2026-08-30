@@ -2,7 +2,7 @@
 
 **Local-first mobile app for households and hobby groups to track lent and borrowed items, due dates, returns, and portable history without accounts.**
 
-> **Status:** the offline handoff workflow includes accessible history search and optional, just-in-time on-device due reminders with persisted reconciliation and safe notification navigation.
+> **Status:** the complete local handoff, return/reopen, reminder, portable backup/restore, CSV export, and deletion workflow is implemented without accounts or hidden data transfer.
 
 ## Overview
 
@@ -74,23 +74,27 @@ Marking an exchange returned atomically appends a `returned` event and updates t
 - **Initial targets:** Android 10+ and iOS 16+
 - **Desktop/web:** not part of the MVP; portable exports remain readable without the app
 
-Flutter provides one accessible UI codebase while retaining platform-native camera/photo-picker, file-share, and notification integrations. Domain and persistence logic will remain UI-independent and testable.
+Flutter provides one accessible UI codebase while retaining platform-native photo, file-picker, and notification integrations. Domain and persistence logic remains UI-independent and testable.
 
 ## Local data and persistence
 
 The implemented schema uses Drift over SQLite for `PersonAlias`, `Item`, `Exchange`, append-only `ExchangeEvent`, `Attachment`, and `Reminder` records. It stores UTC instants as SQLite integer timestamps. Exchange direction is `lent` or `borrowed`; status is `open` or `returned`. A returned projection must have a return timestamp and an open projection must not. Due times cannot precede handoff times.
 
-Create and edit produce history events. Return and reopen append a compensating event and update the exchange projection in one SQLite transaction; stale or mismatched transitions are rejected, and failed writes roll back both changes. Creating another exchange can safely reuse existing person/item IDs while updating their mutable labels and preserving original creation timestamps. Repository queries support status, due cutoff, person, direction, and case-insensitive item/person text filters, with due-dated results ordered earliest first and records without due dates last. Schema version 2 rebuilds version 1 core tables with the current integrity constraints, adds attachments, reminders, and query indexes, and preserves valid history; invalid legacy rows fail migration without being silently accepted.
+Create and edit produce history events. Return and reopen append a compensating event and update the exchange projection in one SQLite transaction; stale or mismatched transitions are rejected, and failed writes roll back both changes. Creating another exchange can safely reuse existing person/item IDs while updating their mutable labels and preserving original creation timestamps. Repository queries support status, due cutoff, person, direction, and case-insensitive item/person text filters, with due-dated results ordered earliest first and records without due dates last. Database schema version 3 preserves valid version 1/2 history while rebuilding integrity constraints and durable reminder state; invalid legacy rows fail migration without being silently accepted.
 
-Attachments contain a stable ID and a portable path relative to an app-owned storage root. Domain validation and a database constraint reject Unix, Windows-drive, and parent-traversal absolute paths. No device-specific path is persisted. This milestone defines attachment metadata only; it does not read photos or request camera/photo access.
+Attachments contain a stable ID and a portable path relative to an app-owned storage root. Domain validation and a database constraint reject Unix, Windows-drive, and parent-traversal paths. No device-specific path is persisted. The application-support root is resolved to its canonical operating-system path, the supplied root itself must be a real directory rather than a link, and every app-relative component is checked for symbolic links at filesystem operation boundaries. App-controlled photo, backup, restore, and cleanup operations are serialized. This containment model relies on the supported Android/iOS app sandbox preventing an adversarial external process from rewriting private paths between a pure-Dart check and syscall; pure Dart cannot make those two actions atomic.
 
-Export and restore remain planned for a later milestone:
+Users can delete a photo while retaining its text exchange, delete an individual exchange and its history, or delete all local records, attachments, reminders, and automatic pre-restore snapshots after a destructive confirmation. Photo, exchange, and all-data deletion first moves known files to private deletion staging, rolls them back if the database deletion fails, and removes (or retries) staged files only after commit; all-data deletion then sweeps unreferenced private attachment and staging files. If post-commit operating-system file or notification cleanup fails, the app reports that partial cleanup instead of falsely claiming rollback.
 
-- No account or remote service is required.
-- A backup is a versioned ZIP containing a JSON manifest plus user-selected attachments.
-- CSV export provides a human-readable exchange history without embedding photos.
-- Restore validates schema version, attachment hashes, IDs, and required fields before changing local data.
-- Deleting app data or uninstalling removes local records unless the user exported a backup.
+Open **Data and privacy** from the Exchanges app bar to use explicit system file-picker actions:
+
+- **Export ZIP backup** writes the versioned `backup.json` manifest and, when the **Include photos** switch is on, verified attachment payloads. Turn it off for a record-only backup.
+- **Export CSV history** writes documented UTF-8 exchange rows without photos. CSV is inspection-only and cannot be restored.
+- **Preview and restore ZIP** validates the complete archive before showing add/update/conflict/missing-photo counts. Nothing changes until confirmation. Newer incoming rows are added or updated; same-age/older conflicts retain the local row.
+- Immediately before an approved restore, the app creates an app-private pre-restore ZIP snapshot. Adds, updates, and attachment replacement/removal run while one SQLite transaction is open; file changes are explicitly rolled back if any file or database operation fails, and the database transaction is aborted.
+- Unsupported future versions, unknown required collections, duplicate IDs/paths, malformed timestamps, invalid relationships, traversal paths, undeclared files, and attachment size/SHA-256 mismatches are rejected.
+
+The full stable field contract, schema-0 migration, validation rules, merge policy, and CSV format are published in [docs/backup-schema-v1.md](docs/backup-schema-v1.md). Backups are **not encrypted**: anyone with the file can read its records and included photos. Lend Loop never uploads them. Deleting app data or uninstalling removes local records unless the user explicitly saved a backup elsewhere.
 
 ## Privacy and permissions
 
@@ -104,7 +108,7 @@ Lend Loop is offline-first and does not include analytics, advertising, or remot
 | Location | Not requested | No location workflow |
 | Network | Not required for core value | Development/package retrieval only |
 
-The app remains useful if photo and notification permissions are denied. Export occurs only after an explicit user action through the platform share/file picker.
+The app remains useful if photo and notification permissions are denied. Export and restore occur only after explicit user actions through the platform file picker. No account, analytics, ads, contacts access, cloud backend, or background backup transfer is present.
 
 ## Accessibility expectations
 
@@ -188,7 +192,7 @@ CI resolves the committed lockfile from a clean checkout, checks formatting, run
 
 ### Dependencies, licenses, and generated code
 
-Runtime persistence uses `drift` 2.34.3 (MIT) and `sqlite3` 3.5.2 (MIT, with native binaries supplied through Dart build hooks); SQLite itself is public domain. `path_provider` 2.1.6 locates app-private storage, `image_picker` 1.2.3 performs only the user-triggered photo selection, `flutter_local_notifications` 19.4.2 schedules optional on-device reminders, `timezone` 0.10.1 represents their UTC instants, and `crypto` 3.0.7 computes attachment SHA-256 digests. These dependencies do not add accounts, analytics, advertising, cloud synchronization, contacts, or hidden data transfer. Flutter remains BSD-3-Clause. Development-only generation uses `drift_dev` 2.34.5 and `build_runner` 2.16.0; lint/test tooling remains `flutter_lints` 6.0.0 and `flutter_test`. Exact direct and transitive versions are committed in `pubspec.lock`.
+Runtime persistence uses `drift` 2.34.3 (MIT) and `sqlite3` 3.5.2 (MIT, with native binaries supplied through Dart build hooks); SQLite itself is public domain. `path_provider` 2.1.6 locates app-private storage, `image_picker` 1.2.3 performs only the user-triggered photo selection, `flutter_local_notifications` 19.4.2 schedules optional on-device reminders, `timezone` 0.10.1 represents their UTC instants, `crypto` 3.0.7 computes attachment SHA-256 digests, `archive` 4.2.0 writes/validates ZIP files, and `file_picker` 12.1.2 provides user-initiated save/open dialogs. These dependencies do not add accounts, analytics, advertising, cloud synchronization, contacts, or hidden data transfer. Flutter remains BSD-3-Clause. Development-only generation uses `drift_dev` 2.34.5 and `build_runner` 2.16.0; lint/test tooling remains `flutter_lints` 6.0.0 and `flutter_test`. Exact direct and transitive versions are committed in `pubspec.lock`.
 
 Notification platform declarations, automated coverage, and an honest manual verification checklist are documented in [docs/notification-verification.md](docs/notification-verification.md). No simulator or physical-device verification is implied by automated tests.
 

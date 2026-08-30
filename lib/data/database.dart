@@ -410,19 +410,7 @@ final class DriftExchangeRepository
     final List<AttachmentRow> rows = await (database.select(
       database.attachments,
     )..where((Attachments table) => table.exchangeId.equals(id.value))).get();
-    return rows
-        .map(
-          (AttachmentRow row) => domain.Attachment(
-            id: domain.AttachmentId(row.id),
-            exchangeId: domain.ExchangeId(row.exchangeId),
-            itemId: row.itemId == null ? null : domain.ItemId(row.itemId!),
-            relativePath: row.relativePath,
-            mediaType: row.mediaType,
-            byteSize: row.byteSize,
-            digest: row.digest,
-          ),
-        )
-        .toList(growable: false);
+    return rows.map(_attachment).toList(growable: false);
   }
 
   @override
@@ -507,6 +495,74 @@ final class DriftExchangeRepository
           digest: attachment.digest,
         ),
       );
+
+  @override
+  Future<domain.Attachment> deleteAttachment(domain.AttachmentId id) =>
+      database.transaction(() async {
+        final AttachmentRow? row =
+            await (database.select(database.attachments)
+                  ..where((Attachments table) => table.id.equals(id.value)))
+                .getSingleOrNull();
+        if (row == null) {
+          throw domain.NotFound('Attachment $id was not found.');
+        }
+        await (database.delete(
+          database.attachments,
+        )..where((Attachments table) => table.id.equals(id.value))).go();
+        return _attachment(row);
+      });
+
+  @override
+  Future<List<domain.Attachment>> deleteExchange(
+    domain.ExchangeId id,
+  ) => database.transaction(() async {
+    final ExchangeRow? exchange = await (database.select(
+      database.exchanges,
+    )..where((Exchanges table) => table.id.equals(id.value))).getSingleOrNull();
+    if (exchange == null) {
+      throw domain.NotFound('Exchange $id was not found.');
+    }
+    final List<domain.Attachment> removed = await attachments(id);
+    await (database.delete(
+      database.reminders,
+    )..where((Reminders table) => table.exchangeId.equals(id.value))).go();
+    await (database.delete(
+      database.attachments,
+    )..where((Attachments table) => table.exchangeId.equals(id.value))).go();
+    await (database.delete(
+      database.exchangeEvents,
+    )..where((ExchangeEvents table) => table.exchangeId.equals(id.value))).go();
+    await (database.delete(
+      database.exchanges,
+    )..where((Exchanges table) => table.id.equals(id.value))).go();
+    await database.customStatement(
+      'DELETE FROM people WHERE id = ? AND NOT EXISTS '
+      '(SELECT 1 FROM exchanges WHERE person_id = ?)',
+      <Object?>[exchange.personId, exchange.personId],
+    );
+    await database.customStatement(
+      'DELETE FROM items WHERE id = ? AND NOT EXISTS '
+      '(SELECT 1 FROM exchanges WHERE item_id = ?)',
+      <Object?>[exchange.itemId, exchange.itemId],
+    );
+    return removed;
+  });
+
+  @override
+  Future<List<domain.Attachment>> deleteAllLocalData() =>
+      database.transaction(() async {
+        final List<domain.Attachment> removed =
+            (await database.select(database.attachments).get())
+                .map(_attachment)
+                .toList(growable: false);
+        await database.delete(database.reminders).go();
+        await database.delete(database.attachments).go();
+        await database.delete(database.exchangeEvents).go();
+        await database.delete(database.exchanges).go();
+        await database.delete(database.items).go();
+        await database.delete(database.people).go();
+        return removed;
+      });
 
   @override
   Future<domain.Reminder?> getReminder(domain.ExchangeId id) async {
@@ -599,6 +655,16 @@ domain.ExchangeEvent _event(ExchangeEventRow row) => domain.ExchangeEvent(
   type: domain.ExchangeEventType.values.byName(row.type),
   occurredAt: row.occurredAt,
   metadata: row.metadata,
+);
+
+domain.Attachment _attachment(AttachmentRow row) => domain.Attachment(
+  id: domain.AttachmentId(row.id),
+  exchangeId: domain.ExchangeId(row.exchangeId),
+  itemId: row.itemId == null ? null : domain.ItemId(row.itemId!),
+  relativePath: row.relativePath,
+  mediaType: row.mediaType,
+  byteSize: row.byteSize,
+  digest: row.digest,
 );
 
 domain.Reminder _reminder(ReminderRow row) => domain.Reminder(

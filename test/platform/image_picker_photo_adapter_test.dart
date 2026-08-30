@@ -61,4 +61,73 @@ void main() {
       expect(await Directory('${root.path}/attachments').exists(), isFalse);
     },
   );
+
+  test(
+    'stage failure leaves the tracked file and database unchanged',
+    () async {
+      final File photo = File('${root.path}/attachments/photo.jpg');
+      await photo.parent.create(recursive: true);
+      await photo.writeAsBytes(<int>[1]);
+      bool databaseCalled = false;
+      final ImagePickerPhotoAdapter adapter = ImagePickerPhotoAdapter(
+        rootDirectory: () async => root,
+        beforeStage: (_) async => throw FileSystemException('stage failed'),
+      );
+
+      await expectLater(
+        adapter.deleteWithRollback(<String>['attachments/photo.jpg'], () async {
+          databaseCalled = true;
+        }),
+        throwsA(isA<FileSystemException>()),
+      );
+
+      expect(databaseCalled, isFalse);
+      expect(await photo.exists(), isTrue);
+    },
+  );
+
+  test('database failure rolls a staged photo back', () async {
+    final File photo = File('${root.path}/attachments/photo.jpg');
+    await photo.parent.create(recursive: true);
+    await photo.writeAsBytes(<int>[1]);
+    final ImagePickerPhotoAdapter adapter = ImagePickerPhotoAdapter(
+      rootDirectory: () async => root,
+    );
+
+    await expectLater(
+      adapter.deleteWithRollback(<String>[
+        'attachments/photo.jpg',
+      ], () async => throw StateError('database failed')),
+      throwsStateError,
+    );
+
+    expect(await photo.readAsBytes(), <int>[1]);
+    expect(await Directory('${root.path}/.deletion-staging').exists(), isFalse);
+  });
+
+  test('unlink failure is reported and staged data is retried', () async {
+    final File photo = File('${root.path}/attachments/photo.jpg');
+    await photo.parent.create(recursive: true);
+    await photo.writeAsBytes(<int>[1]);
+    bool failFinalize = true;
+    final ImagePickerPhotoAdapter adapter = ImagePickerPhotoAdapter(
+      rootDirectory: () async => root,
+      beforeFinalize: (_) async {
+        if (failFinalize) throw FileSystemException('unlink failed');
+      },
+    );
+
+    expect(
+      await adapter.deleteWithRollback(<String>[
+        'attachments/photo.jpg',
+      ], () async {}),
+      isFalse,
+    );
+    expect(await photo.exists(), isFalse);
+    expect(await Directory('${root.path}/.deletion-staging').exists(), isTrue);
+
+    failFinalize = false;
+    expect(await adapter.deleteWithRollback(<String>[], () async {}), isTrue);
+    expect(await Directory('${root.path}/.deletion-staging').exists(), isFalse);
+  });
 }

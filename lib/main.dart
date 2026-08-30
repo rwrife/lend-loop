@@ -4,11 +4,14 @@ import 'package:lend_loop/app/startup_error_app.dart';
 import 'package:lend_loop/application/exchange_workflow.dart';
 import 'package:lend_loop/application/reminder_coordinator.dart';
 import 'package:lend_loop/application/runtime_dependencies.dart';
+import 'package:lend_loop/data/backup_service.dart';
 import 'package:lend_loop/data/database.dart';
 import 'package:lend_loop/data/database_factory.dart';
+import 'package:lend_loop/platform/backup_file_adapter.dart';
 import 'package:lend_loop/platform/image_picker_photo_adapter.dart';
 import 'package:lend_loop/platform/local_notification_adapter.dart';
 import 'package:lend_loop/platform/notification_adapter.dart';
+import 'package:path_provider/path_provider.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -96,5 +99,11 @@ Future<Widget> buildRootApp({
     notificationTaps: notificationTaps,
     notificationFeatureMessage: notificationFeatureMessage,
     retryNotificationSetup: retryNotificationSetup,
+    backups: BackupService(
+      database: database,
+      rootDirectory: getApplicationSupportDirectory,
+      clock: clock,
+    ),
+    backupFiles: FilePickerBackupFileAdapter(),
   );
 }
