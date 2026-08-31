@@ -1,0 +1,14 @@
+PRAGMA foreign_keys = ON;
+CREATE TABLE people (id TEXT NOT NULL PRIMARY KEY, display_name TEXT NOT NULL, private_note TEXT, created_at INTEGER NOT NULL, updated_at INTEGER NOT NULL);
+CREATE TABLE items (id TEXT NOT NULL PRIMARY KEY, name TEXT NOT NULL, description TEXT, category TEXT, created_at INTEGER NOT NULL, updated_at INTEGER NOT NULL);
+CREATE TABLE exchanges (id TEXT NOT NULL PRIMARY KEY, item_id TEXT NOT NULL REFERENCES items(id), person_id TEXT NOT NULL REFERENCES people(id), direction TEXT NOT NULL CHECK (direction IN ('lent', 'borrowed')), handed_off_at INTEGER NOT NULL, due_at INTEGER, status TEXT NOT NULL CHECK (status IN ('open', 'returned')), returned_at INTEGER, created_at INTEGER NOT NULL, updated_at INTEGER NOT NULL, CHECK (due_at IS NULL OR due_at >= handed_off_at), CHECK ((status = 'open' AND returned_at IS NULL) OR (status = 'returned' AND returned_at IS NOT NULL)));
+CREATE TABLE exchange_events (id TEXT NOT NULL PRIMARY KEY, exchange_id TEXT NOT NULL REFERENCES exchanges(id), type TEXT NOT NULL CHECK (type IN ('created', 'edited', 'reminded', 'returned', 'reopened')), occurred_at INTEGER NOT NULL, metadata TEXT);
+CREATE TABLE attachments (id TEXT NOT NULL PRIMARY KEY, exchange_id TEXT NOT NULL REFERENCES exchanges(id), item_id TEXT REFERENCES items(id), relative_path TEXT NOT NULL CHECK (relative_path <> '' AND relative_path NOT LIKE '/%' AND relative_path NOT LIKE '../%' AND relative_path NOT LIKE '%/../%'), media_type TEXT NOT NULL, byte_size INTEGER NOT NULL CHECK (byte_size >= 0), digest TEXT NOT NULL);
+CREATE TABLE reminders (exchange_id TEXT NOT NULL PRIMARY KEY REFERENCES exchanges(id), requested_at INTEGER NOT NULL, platform_scheduling_id INTEGER NOT NULL UNIQUE, state TEXT NOT NULL);
+INSERT INTO people VALUES ('fixture-person','Version 2 Person',NULL,1785542400,1785542400);
+INSERT INTO items VALUES ('fixture-item','Version 2 Item','seeded fixture',NULL,1785542400,1785542400);
+INSERT INTO exchanges VALUES ('fixture-exchange','fixture-item','fixture-person','lent',1785542400,1785628800,'open',NULL,1785542400,1785542400);
+INSERT INTO exchange_events VALUES ('fixture-event','fixture-exchange','created',1785542400,NULL);
+INSERT INTO attachments VALUES ('fixture-attachment','fixture-exchange','fixture-item','attachments/fixture.jpg','image/jpeg',3,'fixture-digest');
+INSERT INTO reminders VALUES ('fixture-exchange',1785542400,99,'enabled');
+PRAGMA user_version = 2;

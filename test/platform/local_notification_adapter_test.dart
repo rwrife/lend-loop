@@ -197,6 +197,33 @@ void main() {
     expect(call.details.iOS, isNotNull);
   });
 
+  test('DST repeated local hour remains two distinct UTC instants', () async {
+    final DateTime first = DateTime.parse('2026-11-01T01:30:00-04:00');
+    final DateTime second = DateTime.parse('2026-11-01T01:30:00-05:00');
+
+    await adapter.schedule(
+      ScheduledNotification(
+        id: 1,
+        exchangeId: ExchangeId('before-fallback'),
+        title: 'Before fallback',
+        body: 'First local 1:30',
+        scheduledAt: first,
+      ),
+    );
+    await adapter.schedule(
+      ScheduledNotification(
+        id: 2,
+        exchangeId: ExchangeId('after-fallback'),
+        title: 'After fallback',
+        body: 'Second local 1:30',
+        scheduledAt: second,
+      ),
+    );
+
+    expect(plugin.scheduled[1]!.date.toUtc(), DateTime.utc(2026, 11, 1, 5, 30));
+    expect(plugin.scheduled[2]!.date.toUtc(), DateTime.utc(2026, 11, 1, 6, 30));
+  });
+
   test('cancels and maps pending platform IDs', () async {
     plugin.pending = const <PendingNotificationRequest>[
       PendingNotificationRequest(2, 'two', null, null),

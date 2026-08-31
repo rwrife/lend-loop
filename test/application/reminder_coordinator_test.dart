@@ -429,4 +429,55 @@ void main() {
       expect(reminders.values, isEmpty);
     },
   );
+
+  test('app relaunch reconciliation repairs lost platform state', () async {
+    notifications.permission = NotificationPermission.granted;
+    final ExchangeId id = ExchangeId('survives-relaunch');
+    await coordinator.enable(
+      exchangeId: id,
+      itemName: 'Travel adapter',
+      personName: 'Sam',
+      scheduledAt: now.add(const Duration(days: 2)),
+    );
+    final int platformId = reminders.values[id]!.platformSchedulingId;
+    notifications.scheduled.clear();
+
+    final ReminderCoordinator relaunched = ReminderCoordinator(
+      notifications: notifications,
+      reminders: reminders,
+      clock: _Clock(now),
+    );
+    await relaunched.reconcile();
+
+    expect(notifications.scheduled.keys, <int>{platformId});
+    expect(
+      reminders.values[id]!.deliveryState,
+      ReminderDeliveryState.scheduled,
+    );
+  });
+
+  test(
+    'revoked permission rejects another enable without losing records',
+    () async {
+      notifications.permission = NotificationPermission.granted;
+      await coordinator.enable(
+        exchangeId: ExchangeId('existing'),
+        itemName: 'Drill',
+        personName: 'Sam',
+        scheduledAt: now.add(const Duration(days: 1)),
+      );
+      notifications.permission = NotificationPermission.denied;
+
+      expect(
+        await coordinator.enable(
+          exchangeId: ExchangeId('after-revoke'),
+          itemName: 'Book',
+          personName: 'Alex',
+          scheduledAt: now.add(const Duration(days: 2)),
+        ),
+        ReminderEnableResult.denied,
+      );
+      expect(reminders.values.keys, <ExchangeId>{ExchangeId('existing')});
+    },
+  );
 }

@@ -364,6 +364,10 @@ void main() {
     await tester.tap(find.byKey(const Key('recordHandoffButton')));
     await tester.pumpAndSettle();
     expect(find.text('Record handoff'), findsOneWidget);
+    expect(
+      tester.getSemantics(find.byKey(const Key('itemNameField'))).label,
+      contains('Item name'),
+    );
     expect(tester.takeException(), isNull);
     Navigator.of(tester.element(find.text('Record handoff'))).pop();
     await tester.pumpAndSettle();
@@ -384,6 +388,19 @@ void main() {
     await tester.tap(find.textContaining('Very long camping tent name'));
     await tester.pumpAndSettle();
     expect(find.text('Exchange details'), findsOneWidget);
+    final Finder markReturned = find.byKey(const Key('markReturnedButton'));
+    await tester.scrollUntilVisible(
+      markReturned,
+      250,
+      scrollable: find.byType(Scrollable).last,
+    );
+    expect(
+      tester
+          .getSemantics(markReturned)
+          .getSemanticsData()
+          .hasAction(SemanticsAction.tap),
+      isTrue,
+    );
     expect(tester.takeException(), isNull);
   });
 

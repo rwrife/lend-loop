@@ -110,6 +110,16 @@ Lend Loop is offline-first and does not include analytics, advertising, or remot
 
 The app remains useful if photo and notification permissions are denied. Export and restore occur only after explicit user actions through the platform file picker. No account, analytics, ads, contacts access, cloud backend, or background backup transfer is present.
 
+## Release verification
+
+Run `make verify-rc` for the reproducible release-candidate gates. It checks
+formatting, analysis, the full headless suite, the lifecycle integration, an
+Android debug build, and an iOS simulator `--no-codesign` build when running on
+macOS. These are unsigned development/simulator build checks, not signing or
+store-release claims. See [the cross-platform evidence matrix](docs/release-test-matrix.md)
+and [database fixture process](docs/database-fixtures.md) for exact automated,
+simulator, physical-device, and manual accessibility evidence categories.
+
 ## Accessibility expectations
 
 - Complete screen-reader names, roles, values, and hints for interactive controls

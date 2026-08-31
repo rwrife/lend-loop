@@ -41,4 +41,24 @@ void main() {
 
     expect(await adapter.pickBackup(), <int>[3, 4]);
   });
+
+  test(
+    'cancelled save and open pickers make no implicit file choice',
+    () async {
+      final FilePickerBackupFileAdapter adapter = FilePickerBackupFileAdapter(
+        save: ({required fileName, required bytes, required mimeType}) async =>
+            null,
+        pick: () async => null,
+      );
+
+      expect(
+        await adapter.save(
+          BackupArtifact(fileName: 'private.zip', bytes: Uint8List(0)),
+          mimeType: 'application/zip',
+        ),
+        isFalse,
+      );
+      expect(await adapter.pickBackup(), isNull);
+    },
+  );
 }

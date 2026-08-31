@@ -4,6 +4,7 @@ import 'dart:typed_data';
 
 import 'package:drift/native.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/semantics.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:lend_loop/application/exchange_workflow.dart';
 import 'package:lend_loop/data/backup_service.dart';
@@ -397,4 +398,44 @@ void main() {
       );
     },
   );
+
+  testWidgets('data and privacy remains semantic and usable at 2x text', (
+    WidgetTester tester,
+  ) async {
+    tester.view.physicalSize = const Size(430, 900);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    await tester.pumpWidget(
+      MediaQuery(
+        data: const MediaQueryData(textScaler: TextScaler.linear(2)),
+        child: MaterialApp(
+          home: DataPrivacyScreen(
+            backups: backups,
+            files: files,
+            workflow: workflow,
+            photos: photos,
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('Data and privacy'), findsOneWidget);
+    final Finder restore = find.byKey(const Key('restoreBackupButton'));
+    await tester.scrollUntilVisible(
+      restore,
+      250,
+      scrollable: find.byType(Scrollable).last,
+    );
+    expect(restore, findsOneWidget);
+    expect(
+      tester
+          .getSemantics(restore)
+          .getSemanticsData()
+          .hasAction(SemanticsAction.tap),
+      isTrue,
+    );
+    expect(tester.takeException(), isNull);
+  });
 }
