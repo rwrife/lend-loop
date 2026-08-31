@@ -18,7 +18,7 @@ env:
 
 jobs:
   quality:
-    name: Format, analyze, and test
+    name: Format and analyze
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
@@ -42,14 +42,70 @@ jobs:
         run: dart format --output=none --set-exit-if-changed .
 
       - name: Run strict static analysis
-        run: flutter analyze
+        shell: bash
+        run: |
+          set -o pipefail
+          flutter analyze 2>&1 | tee analysis.log
 
-      - name: Run automated unit and widget tests
-        run: flutter test --coverage
+      - name: Save analysis log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: static-analysis-log
+          path: analysis.log
+          if-no-files-found: ignore
+
+  headless-tests:
+    name: Headless ${{ matrix.name }} tests
+    needs: quality
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: domain-application-data
+            paths: test/domain test/application test/data
+          - name: platform-adapters
+            paths: test/platform
+          - name: widgets-accessibility
+            paths: test/app test/features test/main_test.dart
+          - name: lifecycle-integration
+            paths: test/integration/lifecycle_matrix_test.dart
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v5
+
+      - name: Install pinned Flutter SDK
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          channel: stable
+          cache: true
+
+      - name: Resolve locked dependencies
+        run: flutter pub get --enforce-lockfile
+
+      - name: Run shard with useful output
+        shell: bash
+        run: |
+          set -o pipefail
+          mkdir -p test-results
+          flutter test --coverage ${{ matrix.paths }} 2>&1 | tee test-results/${{ matrix.name }}.log
+
+      - name: Retain test log and coverage
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: headless-${{ matrix.name }}
+          path: |
+            test-results/
+            coverage/lcov.info
+          if-no-files-found: warn
 
   android-build:
     name: Android debug build
-    needs: quality
+    needs: [quality, headless-tests]
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
@@ -67,11 +123,25 @@ jobs:
         run: flutter pub get --enforce-lockfile
 
       - name: Build unsigned Android debug APK
-        run: flutter build apk --debug
+        shell: bash
+        run: |
+          set -o pipefail
+          mkdir -p build-logs
+          flutter build apk --debug 2>&1 | tee build-logs/android-debug.log
+
+      - name: Retain unsigned Android artifact and log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: unsigned-android-debug
+          path: |
+            build/app/outputs/flutter-apk/app-debug.apk
+            build-logs/android-debug.log
+          if-no-files-found: warn
 
   ios-simulator-build:
     name: iOS simulator build
-    needs: quality
+    needs: [quality, headless-tests]
     runs-on: macos-15
     timeout-minutes: 35
     steps:
@@ -89,4 +159,18 @@ jobs:
         run: flutter pub get --enforce-lockfile
 
       - name: Build unsigned iOS simulator app
-        run: flutter build ios --simulator --no-codesign
+        shell: bash
+        run: |
+          set -o pipefail
+          mkdir -p build-logs
+          flutter build ios --simulator --no-codesign 2>&1 | tee build-logs/ios-simulator.log
+
+      - name: Retain unsigned iOS simulator artifact and log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: unsigned-ios-simulator
+          path: |
+            build/ios/iphonesimulator/Runner.app
+            build-logs/ios-simulator.log
+          if-no-files-found: warn

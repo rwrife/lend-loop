@@ -63,6 +63,24 @@ void main() {
   );
 
   test(
+    'maps camera denial and revocation without retaining a staged copy',
+    () async {
+      for (final String code in <String>[
+        'camera_access_denied',
+        'camera_access_restricted',
+        'photo_access_restricted',
+      ]) {
+        final ImagePickerPhotoAdapter adapter = ImagePickerPhotoAdapter(
+          pick: () async => throw PlatformException(code: code),
+          rootDirectory: () async => root,
+        );
+        expect((await adapter.pickPhoto()).status, PhotoPickStatus.denied);
+      }
+      expect(await Directory('${root.path}/attachments').exists(), isFalse);
+    },
+  );
+
+  test(
     'stage failure leaves the tracked file and database unchanged',
     () async {
       final File photo = File('${root.path}/attachments/photo.jpg');
