@@ -5,16 +5,19 @@
 .pub/
 build/
 coverage/
+.artifacts/
 .flutter-plugins-dependencies
 *.lock
 
 # Keep the application dependency lock once a Flutter app exists
 !pubspec.lock
 
-# IDEs
+# IDEs and helper caches
 .idea/
 .vscode/
 *.iml
+__pycache__/
+*.py[cod]
 
 # Android / iOS generated and local files
 android/.gradle/
@@ -30,6 +33,10 @@ ios/Flutter/ephemeral/
 .env.*
 *.jks
 *.keystore
+*.p12
+*.p8
+*.mobileprovision
+*.cer
 local-exports/
 
 # OS
