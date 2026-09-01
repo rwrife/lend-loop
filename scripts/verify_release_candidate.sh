@@ -8,6 +8,9 @@ printf '\n=== TOOLCHAIN AND LOCKED DEPENDENCIES ===\n'
 flutter --version
 flutter pub get --enforce-lockfile
 
+printf '\n=== RELEASE METADATA AND SIGNING-MATERIAL BOUNDARY ===\n'
+./scripts/check_release_metadata.sh
+
 printf '\n=== FORMATTING ===\n'
 dart format --output=none --set-exit-if-changed .
 
@@ -20,15 +23,7 @@ flutter test --coverage
 printf '\n=== AUTOMATED LIFECYCLE INTEGRATION TEST ===\n'
 flutter test test/integration/lifecycle_matrix_test.dart
 
-printf '\n=== UNSIGNED ANDROID DEBUG BUILD ===\n'
-flutter build apk --debug
+printf '\n=== RELEASE-CANDIDATE PACKAGING ===\n'
+./scripts/build_release_artifacts.sh all
 
-if [[ "$(uname -s)" == "Darwin" ]]; then
-  printf '\n=== UNSIGNED IOS SIMULATOR BUILD ===\n'
-  flutter build ios --simulator --no-codesign
-else
-  printf '\n=== IOS SIMULATOR BUILD: NOT RUN ===\n'
-  echo 'Not run: flutter build ios requires a macOS host with Xcode.'
-fi
-
-echo 'Release-candidate verification passed. Builds are unsigned development/simulator evidence only.'
+echo 'Release-candidate verification passed. Inspect artifact signing labels, logs, and SHA256SUMS before publication.'

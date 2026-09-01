@@ -52,7 +52,7 @@ Marking an exchange returned atomically appends a `returned` event and updates t
 - Lent and borrowed exchange records
 - Open, due soon, overdue, and returned views
 - Locally stored people aliases—no contacts permission required
-- Optional item photo captured or selected with explicit permission
+- Optional item photo selected from the photo library after an explicit action
 - Optional on-device due reminders
 - Return action with immutable event history and undo window
 - Person, direction, status, and text filters
@@ -112,13 +112,31 @@ The app remains useful if photo and notification permissions are denied. Export 
 
 ## Release verification
 
-Run `make verify-rc` for the reproducible release-candidate gates. It checks
-formatting, analysis, the full headless suite, the lifecycle integration, an
-Android debug build, and an iOS simulator `--no-codesign` build when running on
-macOS. These are unsigned development/simulator build checks, not signing or
-store-release claims. See [the cross-platform evidence matrix](docs/release-test-matrix.md)
-and [database fixture process](docs/database-fixtures.md) for exact automated,
-simulator, physical-device, and manual accessibility evidence categories.
+The first public candidate is pinned as `v0.1.0-rc.1`. Run `make verify-rc` for
+the repeatable gates: release metadata/signing-material checks, formatting,
+analysis,
+the full headless suite, lifecycle integration, Android debug plus release
+APK/AAB packaging, and—on macOS—an unsigned iOS archive and simulator build.
+Artifacts, exact command/toolchain evidence, logs, and verified SHA-256
+manifests are written under the ignored `.artifacts/release-candidate/`
+directory. Ordinary CI has no signing secrets;
+its release packages are explicitly unsigned and are not store-publication or
+physical-device evidence.
+
+Release and product documentation:
+
+- [End-user guide](docs/user-guide.md)
+- [Privacy and permissions](docs/privacy.md)
+- [Release/signing process](docs/releasing.md)
+- [Evidence-backed release checklist](docs/release-checklist.md)
+- [Store metadata baseline](docs/store-metadata.md)
+- [Third-party notices](THIRD_PARTY_NOTICES.md)
+- [Cross-platform evidence matrix](docs/release-test-matrix.md)
+
+The candidate includes no screenshots because no real emulator/simulator/device
+capture was available on the preparation host; the evidence rules are recorded
+in [docs/screenshots/README.md](docs/screenshots/README.md). See also the
+[database fixture process](docs/database-fixtures.md).
 
 ## Accessibility expectations
 

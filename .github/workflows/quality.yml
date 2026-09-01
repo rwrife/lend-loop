@@ -35,8 +35,11 @@ jobs:
       - name: Resolve locked dependencies
         run: flutter pub get --enforce-lockfile
 
-      - name: Verify dependency resolution is reproducible
+      - name: Verify locked dependency resolution leaves no diff
         run: git diff --exit-code
+
+      - name: Verify release metadata and signing boundary
+        run: ./scripts/check_release_metadata.sh
 
       - name: Check formatting
         run: dart format --output=none --set-exit-if-changed .
@@ -53,7 +56,7 @@ jobs:
         with:
           name: static-analysis-log
           path: analysis.log
-          if-no-files-found: ignore
+          if-no-files-found: error
 
   headless-tests:
     name: Headless ${{ matrix.name }} tests
@@ -101,13 +104,13 @@ jobs:
           path: |
             test-results/
             coverage/lcov.info
-          if-no-files-found: warn
+          if-no-files-found: error
 
   android-build:
-    name: Android debug build
+    name: Android release APK and AAB
     needs: [quality, headless-tests]
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 40
     steps:
       - name: Check out source
         uses: actions/checkout@v5
@@ -122,28 +125,27 @@ jobs:
       - name: Resolve locked dependencies
         run: flutter pub get --enforce-lockfile
 
-      - name: Build unsigned Android debug APK
+      - name: Build Android debug APK and unsigned release packages
         shell: bash
         run: |
           set -o pipefail
-          mkdir -p build-logs
-          flutter build apk --debug 2>&1 | tee build-logs/android-debug.log
+          ./scripts/build_release_artifacts.sh android
 
-      - name: Retain unsigned Android artifact and log
+      - name: Retain Android packages, logs, and hashes
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: unsigned-android-debug
+          name: release-candidate-android
           path: |
-            build/app/outputs/flutter-apk/app-debug.apk
-            build-logs/android-debug.log
-          if-no-files-found: warn
+            .artifacts/release-candidate/android/
+            .artifacts/release-candidate/release-evidence.log
+          if-no-files-found: error
 
   ios-simulator-build:
-    name: iOS simulator build
+    name: iOS unsigned archive and simulator build
     needs: [quality, headless-tests]
     runs-on: macos-15
-    timeout-minutes: 35
+    timeout-minutes: 45
     steps:
       - name: Check out source
         uses: actions/checkout@v5
@@ -158,19 +160,18 @@ jobs:
       - name: Resolve locked dependencies
         run: flutter pub get --enforce-lockfile
 
-      - name: Build unsigned iOS simulator app
+      - name: Build unsigned iOS archive and simulator app
         shell: bash
         run: |
           set -o pipefail
-          mkdir -p build-logs
-          flutter build ios --simulator --no-codesign 2>&1 | tee build-logs/ios-simulator.log
+          ./scripts/build_release_artifacts.sh ios
 
-      - name: Retain unsigned iOS simulator artifact and log
+      - name: Retain iOS packages, logs, and hashes
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: unsigned-ios-simulator
+          name: release-candidate-ios
           path: |
-            build/ios/iphonesimulator/Runner.app
-            build-logs/ios-simulator.log
-          if-no-files-found: warn
+            .artifacts/release-candidate/ios/
+            .artifacts/release-candidate/release-evidence.log
+          if-no-files-found: error

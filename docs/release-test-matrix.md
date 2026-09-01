@@ -11,9 +11,11 @@ category as proof of another:
 
 1. **Automated headless** — commit SHA, Flutter/Dart versions, host OS, command,
    pass/fail, test log, coverage, and migration-fixture results.
-2. **Unsigned build** — Android debug APK and/or iOS simulator app, build host,
-   command, log, and artifact checksum. This is compilation evidence only; it
-   does not claim signing, installation, launch, or store readiness.
+2. **Build/package** — Android debug APK plus signed-or-explicitly-unsigned
+   release APK/AAB, and/or an unsigned iOS archive/simulator app; record the
+   build host, command, log, signing label, and artifact checksum. This is
+   compilation/package evidence only; it does not claim installation, launch,
+   store readiness, simulator interaction, or physical-device behavior.
 3. **Android emulator plugin smoke** — API level/device profile plus each
    camera/photo, notification, and file-picker observation below.
 4. **iOS simulator plugin smoke** — iOS/runtime/device profile plus each plugin
@@ -30,10 +32,14 @@ contents in logs or release notes.
 
 ## Automated coverage
 
-`make verify-rc` checks formatting, strict analysis, all unit/widget tests, the
-headless lifecycle integration test, Android debug compilation, and—only on a
-macOS host—an iOS simulator `--no-codesign` build. CI runs these as independent
-jobs and retains useful logs, coverage, and unsigned build artifacts.
+`make verify-rc` checks release metadata and tracked signing-material filenames,
+formatting, strict analysis, all unit/widget tests, the headless lifecycle
+integration test, Android debug/release APK and AAB compilation, and—only on a
+macOS host—an iOS `--no-codesign` archive and simulator build. CI runs these as
+independent jobs and retains toolchain/command evidence, logs, coverage,
+packages, and verified SHA-256 manifests.
+Ordinary CI has no signing secrets; its release APK/AAB and iOS archive are
+explicitly unsigned.
 
 The automated tests cover:
 
